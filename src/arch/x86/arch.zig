@@ -1,7 +1,7 @@
 const gdt = @import("gdt.zig");
 const idt = @import("idt.zig");
 const paging = @import("paging.zig");
-const phys_mem = @import("phys_mem.zig");
+const pmem = @import("pmem.zig");
 const pic = @import("pic.zig");
 const serial = @import("serial.zig");
 const vga = @import("vga.zig");
@@ -100,21 +100,6 @@ pub fn inb(port: u16) u8 {
     );
 }
 
-// pub fn enterProtected() callconv(.Naked) void {
-//     asm volatile (
-//         \\ mov %%cr0, %%eax
-//         \\ or  1, %%al
-//         \\ mov %%eax, %%cr0
-//         ::: "eax", "cr0", "al");
-// }
-
-// pub fn invalidatePage(addr: u32) callconv(.Naked) void {
-//     asm volatile ("invlpg %[addr]"
-//         :
-//         : [addr] "n" (addr),
-//     );
-// }
-
 pub fn init() void {
     serial.init();
     Serial.writeln("beginning x86 hardware initialization");
@@ -132,7 +117,7 @@ pub fn init() void {
     Timer.init(50);
     Keyboard.init();
 
-    // _ = phys_mem.alloc() catch unreachable;
-    // const addr2 = phys_mem.alloc() catch unreachable;
-    // Serial.printf("allocated memory at 0x{x}\n", .{addr2});
+    _ = pmem.alloc() catch unreachable;
+    const addr2 = pmem.alloc() catch unreachable;
+    Serial.printf("allocated memory at 0x{x}\n", .{addr2});
 }

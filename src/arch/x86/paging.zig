@@ -74,31 +74,38 @@ const masks = struct {
 var directory: [1024]DirectoryEntry align(4096) = .{0} ** 1024;
 var first_page_table: [1024]DirectoryEntry align(4096) = .{0} ** 1024;
 
+fn virtToPhys(ptr: *anyopaque) u32 {
+    const addr: u32 = @intFromPtr(ptr);
+    return addr - 0xC0000000;
+}
+
 pub fn init() void {
-    // Serial.writeln("initializing page directory");
-    // defer Serial.printf("initialized paging with page directory: {*}\n", .{&directory});
+    Serial.writeln("initializing page directory");
+    defer Serial.printf("initialized paging with page directory: {*}\n", .{&directory});
 
     for (&directory) |*num| {
         const entry = Entry{ .directory = num.* };
-        _ = entry;
         // Not present, supervisor mode, read/write
-        // num.* = masks.set(entry, masks.read_write).value();
+        num.* = masks.set(entry, masks.read_write).value();
     }
 
-    // for (0.., &first_page_table) |ix, *num| {
-    //     // Set bits for address in top 20, then 3 = supervisor, read/write, present
-    //     num.* |= (ix * 0x1000) | 3;
-    // }
-    //
-    // directory[0] = @intFromPtr(&first_page_table) | 3;
+    for (0.., &first_page_table) |ix, *num| {
+        // Set bits for address in top 20, then 3 = supervisor, read/write, present
+        num.* |= (ix << 12) | 3;
+    }
+
+    directory[0] = @intFromPtr(&first_page_table) | 3;
+    const phys_addr = virtToPhys(&directory);
+    Serial.printf("phys_addr = 0x{x}\n", .{phys_addr});
 
     // asm volatile (
     //     \\ mov %[dir], %cr3
-    //     \\ mov %%cr0, %%eax
-    //     \\ or $0x80000000, %%eax
-    //     \\ mov %%eax, %%cr0
+    //     // \\ mov %%cr0, %%eax
+    //     // \\ or $0x80000000, %%eax
+    //     // \\ mov %%eax, %%cr0
     //     :
-    //     : [dir] "r" (@intFromPtr(&directory)),
-    //     : "eax", "cr0"
+    //     : [dir] "{eax}" (phys_addr),
+    //       // : [dir] "{eax}" (@intFromPtr(&directory)),
+    //     : "eax", "cr3"
     // );
 }

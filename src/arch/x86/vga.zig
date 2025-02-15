@@ -32,7 +32,9 @@ pub const VgaColors = enum(u8) {
 var row: usize = 0;
 var column: usize = 0;
 var color = vgaEntryColor(VgaColors.white, VgaColors.light_blue);
-var buffer = @as(*volatile [2000]u16, @ptrFromInt(0xB8000));
+// TODO: parse initial memory map from GRUB and identity map those
+// (which will return this to 0xB8000)
+var buffer = @as(*volatile [2000]u16, @ptrFromInt(0xC00B8000));
 
 fn vgaEntryColor(fg: VgaColors, bg: VgaColors) u8 {
     return @intFromEnum(fg) | (@intFromEnum(bg) << 4);

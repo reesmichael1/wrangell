@@ -7,10 +7,6 @@ var bitmap: [STACK_SIZE]u8 = .{0} ** STACK_SIZE;
 
 const MemError = error{OutOfMemory};
 
-// pub fn virtToPhys(virt_addr: u32) u32 {
-//     const
-// }
-
 /// Find the next free page
 pub fn alloc() MemError!u32 {
     if (false) {

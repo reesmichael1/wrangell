@@ -15,7 +15,7 @@ const MAGIC = 0x1BADB002;
 const STACK_SIZE = 16 * 1024;
 export var stack_bytes: [STACK_SIZE]u8 align(16) linksection(".bss.stack") = undefined;
 extern var KERNEL_ADDR_OFFSET: u32;
-const KERNEL_PAGE_NUMBER = 0xC0100000 >> 22;
+const KERNEL_PAGE_NUMBER = 0xC0200000 >> 22;
 const KERNEL_NUM_PAGES = 1;
 
 export var multiboot align(4) linksection(".rodata.boot") = MultiBoot{
@@ -24,7 +24,7 @@ export var multiboot align(4) linksection(".rodata.boot") = MultiBoot{
     .checksum = -(MAGIC + FLAGS),
 };
 
-export var boot_page_directory align(4096) linksection(".rodata.boot") = init: {
+export var boot_page_directory align(4096) linksection(".text.boot") = init: {
     var dir: [1024]u32 = .{0} ** 1024;
 
     // Bits set: 7, 1, 0 -> this page is present, 4MB, read/write, supervisor
@@ -84,8 +84,12 @@ export fn start_higher_half() callconv(.Naked) noreturn {
     // Now we are mapped so that we can operate in the higher half
     // arch.invalidatePage(0);
 
+    boot_page_directory[0] = 0;
+
     asm volatile (
         \\ invlpg (0)
+        \\ mov %%cr3, %%ecx
+        \\ mov %%ecx, %%cr3
         \\ mov $stack_bytes, %%esp
         \\ add %[stack_size], %%esp
         \\ call kmain
