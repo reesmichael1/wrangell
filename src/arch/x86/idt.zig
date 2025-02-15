@@ -82,7 +82,7 @@ pub const CpuState = extern struct {
 };
 
 export fn isrHandler(cpu: CpuState) void {
-    Vga.printf("ESP = {x}, EIP = {x}\n", .{ cpu.esp, cpu.eip });
+    Vga.printf("ESP = 0x{x:08}, EIP = 0x{x:08}\n", .{ cpu.esp, cpu.eip });
 
     // Eventually we'll have more informative fault handling
     // where we can actually check if a fault is recoverable or not.
