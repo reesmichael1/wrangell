@@ -13,6 +13,7 @@ pub fn build(b: *std.Build) void {
     disabled_features.addFeature(@intFromEnum(std.Target.x86.Feature.sse2));
     disabled_features.addFeature(@intFromEnum(std.Target.x86.Feature.avx));
     disabled_features.addFeature(@intFromEnum(std.Target.x86.Feature.avx2));
+    disabled_features.addFeature(@intFromEnum(std.Target.x86.Feature.bmi));
     disabled_features.addFeature(@intFromEnum(std.Target.x86.Feature.bmi2));
     enabled_features.addFeature(@intFromEnum(std.Target.x86.Feature.soft_float));
 
@@ -49,6 +50,9 @@ pub fn build(b: *std.Build) void {
         kernel_path,
         "-serial",
         "stdio",
+        "-m",
+        "4G",
+        "-no-reboot",
     });
     qemu_cmd.step.dependOn(b.getInstallStep());
 

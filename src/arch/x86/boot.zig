@@ -12,11 +12,13 @@ const MEMINFO = 1 << 1;
 const FLAGS = ALIGN | MEMINFO;
 const MAGIC = 0x1BADB002;
 
-const STACK_SIZE = 16 * 1024;
-export var stack_bytes: [STACK_SIZE]u8 align(16) linksection(".bss.stack") = undefined;
+// Use a larger stack with debug mode because we overflow the smaller stack easily
+// TODO: actually detect that overflow
+const STACK_SIZE = if (@import("builtin").mode == (.Debug)) 64 * 1024 else 16 * 1024;
+pub export var stack_bytes: [STACK_SIZE]u8 align(16) linksection(".bss.stack") = undefined;
 extern var KERNEL_ADDR_OFFSET: u32;
-const KERNEL_PAGE_NUMBER = 0xC0200000 >> 22;
-const KERNEL_NUM_PAGES = 1;
+pub const KERNEL_PAGE_NUMBER = 0xC0200000 >> 22;
+pub const KERNEL_NUM_PAGES = 1;
 
 export var multiboot align(4) linksection(".rodata.boot") = MultiBoot{
     .magic = MAGIC,
@@ -44,18 +46,6 @@ export var boot_page_directory align(4096) linksection(".text.boot") = init: {
 extern fn kmain() void;
 
 export fn _start() linksection(".text.boot") callconv(.Naked) noreturn {
-    // asm volatile (
-    //     \\ mov $stack_bytes, %%esp
-    //     \\ add %[stack_size], %%esp
-    //     \\ call kmain
-    //     :
-    //     : [stack_size] "n" (STACK_SIZE),
-    // );
-    //
-    //     :
-    //     : [dir] "r" (@intFromPtr(&directory)),
-    //     : "eax", "cr0"
-
     asm volatile (
     // Enable paging with higher half mapping
         \\ .extern boot_page_directory
@@ -88,8 +78,6 @@ export fn start_higher_half() callconv(.Naked) noreturn {
 
     asm volatile (
         \\ invlpg (0)
-        \\ mov %%cr3, %%ecx
-        \\ mov %%ecx, %%cr3
         \\ mov $stack_bytes, %%esp
         \\ add %[stack_size], %%esp
         \\ call kmain

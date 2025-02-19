@@ -1,5 +1,6 @@
 const fmt = @import("std").fmt;
 const IOWriter = @import("std").io.Writer;
+const Serial = @import("serial.zig").Serial;
 
 pub fn Writer(putCharOuter: fn (u8) void) type {
     return struct {

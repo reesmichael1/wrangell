@@ -1,6 +1,13 @@
 const std = @import("std");
 const arch = @import("arch.zig").internals;
 
+extern var KERNEL_ADDR_OFFSET: u32;
+extern var KERNEL_PHYSADDR_START: u32;
+extern var KERNEL_PHYSADDR_END: u32;
+extern var KERNEL_VADDR_START: u32;
+extern var KERNEL_STACK_START: u32;
+extern var KERNEL_STACK_END: u32;
+
 comptime {
     const builtin = @import("builtin");
     switch (builtin.cpu.arch) {
@@ -37,9 +44,14 @@ fn pageFault() noreturn {
 export fn kmain() noreturn {
     arch.init();
 
+    arch.Serial.printf("kernel stack = {*} to {*}\n", .{ &KERNEL_STACK_START, &KERNEL_STACK_END });
+    arch.Serial.printf("kernel = {*} to {*}\n", .{ &KERNEL_PHYSADDR_START, &KERNEL_PHYSADDR_END });
+
     arch.Vga.writeln("wrangell 0.0.1\n\n");
 
-    pageFault();
+    // pageFault();
+    const addr: *u8 = @ptrFromInt(0xa0000100);
+    addr.* = 100;
 
     while (true) {
         arch.halt();
@@ -53,5 +65,6 @@ pub fn panic(msg: []const u8, _: ?*std.builtin.StackTrace, _: ?usize) noreturn {
         writeln(msg);
     }
 
+    // arch.haltNoInterrupts();
     arch.spinWait();
 }
