@@ -320,22 +320,22 @@ pub fn init() void {
         : "eax", "cr3"
     );
 
-    mapSinglePage(0x0000b000, 0xA0000000, 3, .four_kb) catch unreachable;
+    // mapSinglePage(0x0000b000, 0xA0000000, 3, .four_kb) catch unreachable;
 
     // asm volatile (
     //     \\ mov %%cr3, %%eax
     //     \\ mov %%eax, %%cr3
     //     ::: "eax", "cr3");
 
-    const test_addr = 0xA0000823;
-    const addr = virtToPhys(test_addr) catch |err| blk: {
-        switch (err) {
-            PageError.NotMapped => {
-                Serial.printf("0x{x:08} was not mapped\n", .{test_addr});
-                break :blk 0;
-            },
-            else => @panic("error while translating memory"),
-        }
-    };
-    Serial.printf("addr = 0x{x:08}\n", .{addr});
+    // const test_addr = 0xA0000823;
+    // const addr = virtToPhys(test_addr) catch |err| blk: {
+    //     switch (err) {
+    //         PageError.NotMapped => {
+    //             Serial.printf("0x{x:08} was not mapped\n", .{test_addr});
+    //             break :blk 0;
+    //         },
+    //         else => @panic("error while translating memory"),
+    //     }
+    // };
+    // Serial.printf("addr = 0x{x:08}\n", .{addr});
 }

@@ -53,6 +53,8 @@ pub fn build(b: *std.Build) void {
         "-m",
         "4G",
         "-no-reboot",
+        // "-display",
+        // "sdl",
     });
     qemu_cmd.step.dependOn(b.getInstallStep());
 

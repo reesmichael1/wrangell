@@ -1,3 +1,4 @@
+const multiboot = @import("../../multiboot.zig");
 const gdt = @import("gdt.zig");
 const idt = @import("idt.zig");
 const paging = @import("paging.zig");
@@ -100,7 +101,7 @@ pub fn inb(port: u16) u8 {
     );
 }
 
-pub fn init() void {
+pub fn init(info: *const multiboot.Info) void {
     serial.init();
     Serial.writeln("beginning x86 hardware initialization");
     defer Serial.writeln("finished x86 hardware initialization");
@@ -112,6 +113,7 @@ pub fn init() void {
     idt.init();
     enableInterrupts();
 
+    pmem.init(info);
     paging.init();
 
     Timer.init(50);

@@ -1,12 +1,11 @@
 const std = @import("std");
 const arch = @import("arch.zig").internals;
+const multiboot = @import("multiboot.zig");
 
-extern var KERNEL_ADDR_OFFSET: u32;
-extern var KERNEL_PHYSADDR_START: u32;
-extern var KERNEL_PHYSADDR_END: u32;
-extern var KERNEL_VADDR_START: u32;
-extern var KERNEL_STACK_START: u32;
-extern var KERNEL_STACK_END: u32;
+// pub const std_options: std.Options = .{
+//     .page_size_min = 4 * 1024,
+//     .page_size_max = 4 * 1024 * 1024,
+// };
 
 comptime {
     const builtin = @import("builtin");
@@ -15,6 +14,13 @@ comptime {
         else => unreachable,
     }
 }
+
+extern var KERNEL_ADDR_OFFSET: u32;
+extern var KERNEL_PHYSADDR_START: u32;
+extern var KERNEL_PHYSADDR_END: u32;
+extern var KERNEL_VADDR_START: u32;
+extern var KERNEL_STACK_START: u32;
+extern var KERNEL_STACK_END: u32;
 
 // Handy test for the interrupt handler
 fn divideByZero() noreturn {
@@ -41,17 +47,21 @@ fn pageFault() noreturn {
     unreachable;
 }
 
-export fn kmain() noreturn {
-    arch.init();
+export fn kmain(magic: u32, info: *const multiboot.Info) noreturn {
+    std.debug.assert(magic == multiboot.BOOTLOADER_MAGIC);
 
-    arch.Serial.printf("kernel stack = {*} to {*}\n", .{ &KERNEL_STACK_START, &KERNEL_STACK_END });
-    arch.Serial.printf("kernel = {*} to {*}\n", .{ &KERNEL_PHYSADDR_START, &KERNEL_PHYSADDR_END });
+    arch.init(info);
+
+    // arch.Serial.printf("kernel stack = {*} to {*}\n", .{ &KERNEL_STACK_START, &KERNEL_STACK_END });
+    // arch.Serial.printf("kernel = {*} to {*}\n", .{ &KERNEL_PHYSADDR_START, &KERNEL_PHYSADDR_END });
+    // arch.Serial.printf("mem_lower = 0x{x:08}\n", .{info.mem_lower});
+    // arch.Serial.printf("mem_upper = 0x{x:08}\n", .{info.mem_upper});
 
     arch.Vga.writeln("wrangell 0.0.1\n\n");
 
     // pageFault();
-    const addr: *u8 = @ptrFromInt(0xa0000100);
-    addr.* = 100;
+    // const addr: *u8 = @ptrFromInt(0xa0000100);
+    // addr.* = 100;
 
     while (true) {
         arch.halt();

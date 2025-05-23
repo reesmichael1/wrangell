@@ -1,4 +1,4 @@
-const fmt = @import("std").fmt;
+const std = @import("std");
 const IOWriter = @import("std").io.Writer;
 const Serial = @import("serial.zig").Serial;
 
@@ -16,7 +16,9 @@ pub fn Writer(putCharOuter: fn (u8) void) type {
         }
 
         pub fn printf(comptime format: []const u8, args: anytype) void {
-            fmt.format(writer, format, args) catch unreachable;
+            // _ = args;
+            // write(format);
+            std.fmt.format(writer, format, args) catch unreachable;
         }
 
         pub fn write(data: []const u8) void {
