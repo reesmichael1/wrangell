@@ -50,18 +50,19 @@ fn pageFault() noreturn {
 export fn kmain(magic: u32, info: *const multiboot.Info) noreturn {
     std.debug.assert(magic == multiboot.BOOTLOADER_MAGIC);
 
-    arch.init(info);
+    arch.init(info) catch @panic("error during architecture initialization");
 
-    // arch.Serial.printf("kernel stack = {*} to {*}\n", .{ &KERNEL_STACK_START, &KERNEL_STACK_END });
-    // arch.Serial.printf("kernel = {*} to {*}\n", .{ &KERNEL_PHYSADDR_START, &KERNEL_PHYSADDR_END });
-    // arch.Serial.printf("mem_lower = 0x{x:08}\n", .{info.mem_lower});
-    // arch.Serial.printf("mem_upper = 0x{x:08}\n", .{info.mem_upper});
+    arch.Serial.printf("kernel stack = {*} to {*}\n", .{ &KERNEL_STACK_START, &KERNEL_STACK_END });
+    arch.Serial.printf("kernel = {*} to {*}\n", .{ &KERNEL_PHYSADDR_START, &KERNEL_PHYSADDR_END });
+    arch.Serial.printf("mem_lower = 0x{x:08}\n", .{info.mem_lower});
+    arch.Serial.printf("mem_upper = 0x{x:08}\n", .{info.mem_upper});
 
     arch.Vga.writeln("wrangell 0.0.1\n\n");
 
     // pageFault();
-    // const addr: *u8 = @ptrFromInt(0xa0000100);
-    // addr.* = 100;
+    // Demonstrate that paging is working (we mapped 0xA0000000 + 0x1000 in paging.zig)
+    const addr: *u8 = @ptrFromInt(0xA0000100);
+    addr.* = 100;
 
     while (true) {
         arch.halt();

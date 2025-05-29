@@ -30,30 +30,25 @@ pub fn init(info: *const multiboot.Info) void {
         @panic("uh-oh");
     }
 
-    // const name: [*:0]u8 = @ptrFromInt(info.boot_loader_name + 0xC0000000);
-    // var buf: [100]u8 = undefined;
-    // const display = std.fmt.bufPrint(&buf, "{s}", .{name}) catch unreachable;
-    // Serial.printf("{d}", .{display.len});
-
-    // _ = name;
-    // Serial.printf("name = {*}\n", .{name});
+    const name: [*:0]u8 = @ptrFromInt(info.boot_loader_name + 0xC0000000);
+    var buf: [100]u8 = undefined;
+    const display = std.fmt.bufPrint(&buf, "{s}", .{name}) catch unreachable;
+    Serial.printf("boot loader name = {d}\n", .{display.len});
 
     const entries_base: [*]multiboot.MmapEntry align(1) = @ptrFromInt(info.mmap_addr + 0xC0000000);
     const count = info.mmap_length / @sizeOf(multiboot.MmapEntry);
     const entries: []multiboot.MmapEntry = entries_base[0..count];
 
     for (entries) |entry| {
-        // _ = entry;
+        Serial.printf("type = {x}, base_addr = 0x{x}\n", .{ entry.type, entry.addr });
+
         // const l = entry.len;
         // std.debug.assert(l == 0x9fc00);
         // const s = entry.size;
         // const t = entry.type;
-        Serial.printf("type = {x}, base_addr = 0x{X}\n", .{ entry.type, entry.addr });
-        // Serial.printf("size = {x}\n", .{s});
-        // Serial.printf("len = {x}\n", .{0x9fc00});
-        // Serial.printf("len = {x}\n", .{l >> 63});
-        // Serial.printf("mmap entry of type {x} and size {x} and len {x}\n", .{ t, s, x });
-        // Serial.printf("entry {}", .{ entry. } );
+        //
+        // Serial.printf("mmap entry of type 0x{x} and size 0x{x} and len 0x{x}\n", .{ t, s, l });
+        // Serial.printf("entry {}", .{entry});
     }
 
     // var map: u32 = info.mmap_addr;

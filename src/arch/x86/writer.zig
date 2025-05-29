@@ -16,8 +16,6 @@ pub fn Writer(putCharOuter: fn (u8) void) type {
         }
 
         pub fn printf(comptime format: []const u8, args: anytype) void {
-            // _ = args;
-            // write(format);
             std.fmt.format(writer, format, args) catch unreachable;
         }
 

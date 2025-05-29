@@ -46,22 +46,9 @@ fn vgaEntry(uc: u8, new_color: u8) u16 {
     return uc | (c << 8);
 }
 
-// extern var KERNEL_STACK_START: []u32;
-// extern var KERNEL_STACK_END: []u32;
-
 pub fn init() void {
     Serial.writeln("beginning VGA initialization");
     defer Serial.writeln("finished VGA initialization");
-
-    Serial.printf("row = {*}\n", .{&row});
-    Serial.printf("column = {*}\n", .{&column});
-
-    // const kernel_stack_size = @intFromPtr(&KERNEL_STACK_END) - @intFromPtr(&KERNEL_STACK_START);
-    // Serial.printf("stack size = 0x{x:08}\n", .{kernel_stack_size});
-
-    // Serial.printf("stack start = 0x{x:08}\n", .{KERNEL_STACK_START});
-    // Serial.printf("stack end = 0x{x:08}\n", .{KERNEL_STACK_END});
-    // Serial.printf("column is at 0x{x:08}\n", .{@intFromPtr(&column)});
 
     clear();
     moveCursor();
@@ -79,16 +66,6 @@ fn putCharAt(c: u8, new_color: u8, x: usize, y: usize) void {
     if (c == '\n') {
         linebreak();
         return;
-    }
-
-    if (y >= VGA_HEIGHT or x >= VGA_WIDTH) {
-        Serial.printf("row = {*}, column = {*}\n", .{ &row, &column });
-        Serial.printf("x = 0x{x:08}, y = 0x{x:08}\n", .{ x, y });
-        clear();
-        column = 0;
-        row = 0;
-        Vga.writeln("tried to write outside of the VGA screen");
-        // @panic();
     }
 
     const index = y * VGA_WIDTH + x;

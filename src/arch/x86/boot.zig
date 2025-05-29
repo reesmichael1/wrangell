@@ -1,9 +1,7 @@
 const arch = @import("arch.zig");
 const multiboot = @import("../../multiboot.zig");
 
-// Use a larger stack with debug mode because we overflow the smaller stack easily
-// TODO: actually detect that overflow
-const STACK_SIZE = if (@import("builtin").mode == (.Debug)) 64 * 1024 else 16 * 1024;
+const STACK_SIZE = 16 * 1024;
 pub export var stack_bytes: [STACK_SIZE]u8 align(16) linksection(".bss.stack") = undefined;
 extern var KERNEL_ADDR_OFFSET: u32;
 pub const KERNEL_PAGE_NUMBER = 0xC0200000 >> 22;

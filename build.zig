@@ -19,7 +19,8 @@ pub fn build(b: *std.Build) void {
 
     const kernel_query = std.Target.Query{
         .cpu_arch = .x86,
-        .cpu_model = .native,
+        .cpu_model = .{ .explicit = &std.Target.x86.cpu.i386 },
+        // .cpu_model = .native,
         .os_tag = .freestanding,
         .abi = .none,
         .cpu_features_sub = disabled_features,
@@ -53,8 +54,8 @@ pub fn build(b: *std.Build) void {
         "-m",
         "4G",
         "-no-reboot",
-        // "-display",
-        // "sdl",
+        "-monitor",
+        "telnet:localhost:4444,server,nowait",
     });
     qemu_cmd.step.dependOn(b.getInstallStep());
 

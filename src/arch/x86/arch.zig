@@ -101,7 +101,7 @@ pub fn inb(port: u16) u8 {
     );
 }
 
-pub fn init(info: *const multiboot.Info) void {
+pub fn init(info: *const multiboot.Info) !void {
     serial.init();
     Serial.writeln("beginning x86 hardware initialization");
     defer Serial.writeln("finished x86 hardware initialization");
@@ -114,7 +114,7 @@ pub fn init(info: *const multiboot.Info) void {
     enableInterrupts();
 
     pmem.init(info);
-    paging.init();
+    try paging.init();
 
     Timer.init(50);
     Keyboard.init();
