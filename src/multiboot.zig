@@ -1,5 +1,16 @@
 pub const BOOTLOADER_MAGIC = 0x2BADB002;
 
+pub const Flags = enum(u32) {
+    name = 0x200,
+    memmap = 0x040,
+
+    const Self = @This();
+
+    pub fn hasFlag(self: Self, flags: u32) bool {
+        return @intFromEnum(self) & flags != 0;
+    }
+};
+
 const Header = packed struct {
     magic: i32,
     flags: i32,

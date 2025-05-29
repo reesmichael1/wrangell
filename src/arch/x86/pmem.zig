@@ -26,49 +26,25 @@ pub fn alloc() PmemError!u32 {
 pub fn init(info: *const multiboot.Info) void {
     Serial.printf("mmap_addr is at 0x{x:08}\n", .{info.mmap_addr});
 
-    if (info.flags & 0x00000040 == 0) {
-        @panic("uh-oh");
+    if (multiboot.Flags.hasFlag(.name, info.flags)) {
+        Serial.printf("boot loader name at 0x{x}\n", .{info.boot_loader_name});
+
+        const name: [*:0]u8 = @ptrFromInt(info.boot_loader_name + 0xC0000000);
+        var buf: [100]u8 = undefined;
+        const display = std.fmt.bufPrint(&buf, "{s}", .{name}) catch unreachable;
+
+        Serial.printf("boot loader name = {s}\n", .{display});
     }
 
-    const name: [*:0]u8 = @ptrFromInt(info.boot_loader_name + 0xC0000000);
-    var buf: [100]u8 = undefined;
-    const display = std.fmt.bufPrint(&buf, "{s}", .{name}) catch unreachable;
-    Serial.printf("boot loader name = {d}\n", .{display.len});
-
-    const entries_base: [*]multiboot.MmapEntry align(1) = @ptrFromInt(info.mmap_addr + 0xC0000000);
-    const count = info.mmap_length / @sizeOf(multiboot.MmapEntry);
-    const entries: []multiboot.MmapEntry = entries_base[0..count];
-
-    for (entries) |entry| {
-        Serial.printf("type = {x}, base_addr = 0x{x}\n", .{ entry.type, entry.addr });
-
-        // const l = entry.len;
-        // std.debug.assert(l == 0x9fc00);
-        // const s = entry.size;
-        // const t = entry.type;
-        //
-        // Serial.printf("mmap entry of type 0x{x} and size 0x{x} and len 0x{x}\n", .{ t, s, l });
-        // Serial.printf("entry {}", .{entry});
+    if (!multiboot.Flags.hasFlag(.memmap, info.flags)) {
+        @panic("no memory map in multiboot header");
     }
 
-    // var map: u32 = info.mmap_addr;
-
-    // while (map < info.mmap_addr + info.mmap_length) {
-    //     const entry: *multiboot.MmapEntry align(1) = @ptrFromInt(map + 0xC0000000);
-    //     Serial.printf("mmap entry of type 0x{x} and size 0x{x:08}\n", .{ entry.type, entry.size });
-    //
-    //     // Serial.printf("entry.size = 0x{x:08}\n", .{entry.size });
-    //
-    //     // map += entry.size + @sizeOf(u32);
-    //     // map += entry.size;
-    //     map += entry.size + @sizeOf(@TypeOf(entry.size));
-    //     Serial.printf("map = 0x{x:08}\n", .{map});
-    // }
-
-    // const mmap: [*]multiboot.MmapEntry = @ptrFromInt(info.mmap_addr + 0xC0000000);
-    // var i: usize = 0;
-    // while (i < info.mmap_length) : (i += @sizeOf(multiboot.MmapEntry)) {
-    //     const entry = mmap[i];
-    //     Serial.printf("mmap entry of type 0x{x} and size 0x{x:08}\n", .{ entry.type, entry.size });
-    // }
+    Serial.writeln("reading memory map from multiboot header");
+    var offset: usize = 0;
+    while (offset < info.mmap_length) {
+        const entry: *align(1) multiboot.MmapEntry = @ptrFromInt(info.mmap_addr + offset + 0xC0000000);
+        Serial.printf("type = {d}, base_addr = 0x{x}, len = 0x{x}\n", .{ entry.type, entry.addr, entry.len });
+        offset += entry.size + 4;
+    }
 }
