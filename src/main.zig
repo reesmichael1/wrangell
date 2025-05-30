@@ -2,11 +2,6 @@ const std = @import("std");
 const arch = @import("arch.zig").internals;
 const multiboot = @import("multiboot.zig");
 
-// pub const std_options: std.Options = .{
-//     .page_size_min = 4 * 1024,
-//     .page_size_max = 4 * 1024 * 1024,
-// };
-
 comptime {
     const builtin = @import("builtin");
     switch (builtin.cpu.arch) {

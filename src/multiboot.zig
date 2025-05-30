@@ -18,19 +18,26 @@ const Header = packed struct {
     padding: i32 = 0,
 };
 
+pub const MmapEntryType = enum(u32) {
+    available = 1,
+    reserved = 2,
+    acpi_reclaimable = 3,
+    nvs = 4,
+    badram = 5,
+};
+
 pub const MmapEntry = packed struct {
     size: u32,
     addr: u64,
     len: u64,
-    type: u32,
+    type: MmapEntryType,
 };
 
 export var multiboot align(4) linksection(".rodata.boot") = multiboot: {
     const ALIGN = 1 << 0;
     const MEMINFO = 1 << 1;
-    // const MEMMAP = 0x00000040;
-    // const FLAGS = ALIGN | MEMMAP | MEMINFO;
-    const FLAGS = ALIGN | MEMINFO;
+    const MEMMAP = 0x00000040;
+    const FLAGS = ALIGN | MEMMAP | MEMINFO;
     const MAGIC = 0x1BADB002;
     break :multiboot Header{
         .magic = MAGIC,

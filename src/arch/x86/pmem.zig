@@ -2,12 +2,65 @@ const std = @import("std");
 const multiboot = @import("../../multiboot.zig");
 const Serial = @import("serial.zig").Serial;
 
-const PAGE_SIZE = 4096;
-const STACK_SIZE = 1024 * 1024 / 8;
+const ONE_MB = 1024 * 1024;
+const MAX_PHYS_ADDR = 0xFFFFFFFF; // 4 GB of RAM
+const PAGE_TABLE_START = 0xFFC00000;
+const PAGE_TABLE_END = MAX_PHYS_ADDR;
 
-var bitmap: [STACK_SIZE]u8 = .{0} ** STACK_SIZE;
+const PAGE_SIZE = 4096;
+const PAGE_COUNT = (MAX_PHYS_ADDR + 1) / PAGE_SIZE;
+const BITMAP_SIZE = PAGE_COUNT / 8; // 8 pages in one byte
+
+var bitmap: [BITMAP_SIZE]u8 = .{0} ** BITMAP_SIZE;
+
+extern var KERNEL_PHYSADDR_START: u32;
+extern var KERNEL_PHYSADDR_END: u32;
+extern var KERNEL_ADDR_OFFSET: *const u32;
+extern var KERNEL_STACK_START: u32;
+extern var KERNEL_STACK_END: u32;
 
 const PmemError = error{OutOfMemory};
+
+fn getByteAndBit(addr: usize) struct { usize, u3 } {
+    return .{ addr / 8, @intCast(addr % 8) };
+}
+
+fn markPageUsed(addr: usize) void {
+    std.debug.assert(std.mem.isAligned(addr, PAGE_SIZE));
+    const byte, const bit = getByteAndBit(addr / PAGE_SIZE);
+    bitmap[byte] |= @as(u8, 1) << bit;
+}
+
+fn freePage(addr: usize) void {
+    std.debug.assert(std.mem.isAligned(addr, PAGE_SIZE));
+    const byte, const bit = getByteAndBit(addr / PAGE_SIZE);
+    bitmap[byte] &= ~(@as(u8, 1) << bit);
+}
+
+fn isPageFree(addr: usize) bool {
+    std.debug.assert(std.mem.isAligned(addr, PAGE_SIZE));
+    const byte, const bit = getByteAndBit(addr / PAGE_SIZE);
+    return (bitmap[byte] & (@as(u8, 1) << bit)) == 0;
+}
+
+fn manipulateRegion(start: usize, end: usize, manipulator: fn (usize) void) void {
+    // Use u64 instead of usize/u32 because we need to handle MAX_PHYS_ADDR,
+    // which is also the max u32 value. If we use u32, then in the loop iteration
+    // where current = end, we trigger an overflow.
+    // We should never exceed u32 inside of the loop body, so the cast below is safe.
+    var current: u64 = start;
+    while (current < std.mem.alignBackward(usize, end, PAGE_SIZE)) : (current += PAGE_SIZE) {
+        manipulator(@intCast(current));
+    }
+}
+
+fn freeRegion(start: usize, end: usize) void {
+    manipulateRegion(start, end, freePage);
+}
+
+fn reserveRegion(start: usize, end: usize) void {
+    manipulateRegion(start, end, markPageUsed);
+}
 
 /// Find the next free page
 pub fn alloc() PmemError!u32 {
@@ -40,11 +93,35 @@ pub fn init(info: *const multiboot.Info) void {
         @panic("no memory map in multiboot header");
     }
 
-    Serial.writeln("reading memory map from multiboot header");
+    // Start by marking all pages as used
+    for (&bitmap) |*entry| {
+        entry.* = 0xFF;
+    }
+
     var offset: usize = 0;
+    Serial.writeln("parsing memmap from multiboot info");
     while (offset < info.mmap_length) {
-        const entry: *align(1) multiboot.MmapEntry = @ptrFromInt(info.mmap_addr + offset + 0xC0000000);
-        Serial.printf("type = {d}, base_addr = 0x{x}, len = 0x{x}\n", .{ entry.type, entry.addr, entry.len });
+        const entry: *align(4) multiboot.MmapEntry = @ptrFromInt(info.mmap_addr + offset + 0xC0000000);
+        Serial.printf("type = {}, base_addr = 0x{x}, len = 0x{x}\n", .{ entry.type, entry.addr, entry.len });
+        if (entry.type == .available) {
+            if (entry.addr + entry.len < 0x100000000) {
+                freeRegion(@intCast(entry.addr), @intCast(entry.addr + entry.len));
+            } else if (entry.addr < 0x10000000) {
+                freeRegion(@intCast(entry.addr), 0xFFFFFFFF);
+            }
+        }
         offset += entry.size + 4;
     }
+
+    reserveRegion(0, ONE_MB);
+    reserveRegion(@intFromPtr(&KERNEL_PHYSADDR_START), @intFromPtr(&KERNEL_PHYSADDR_END));
+    reserveRegion(@intFromPtr(&KERNEL_STACK_START), @intFromPtr(&KERNEL_STACK_END));
+    reserveRegion(PAGE_TABLE_START, PAGE_TABLE_END);
+
+    var total_free_pages: usize = 0;
+    for (bitmap) |entry| {
+        total_free_pages += 8 - @popCount(entry);
+    }
+
+    Serial.printf("total free pages: {}\n", .{total_free_pages});
 }

@@ -109,86 +109,6 @@ pub fn virtToPhys(virt: u32) PageError!u32 {
     return (pt[pt_index] & 0xFFFFF000) + (virt & 0xFFF);
 }
 
-// pub fn virtToPhysOld(addr: u32) PageError!u32 {
-//     // Most significant 10 bits of the address are the PDE index
-//     const pde_index = addr >> 22;
-//
-//     Serial.printf("pde_index = 0x{x:08}\n", .{pde_index});
-//     const pde_entry = directory[pde_index];
-//     Serial.printf("pde_entry = 0x{x:08}\n", .{pde_entry});
-//
-//     if (!masks.is_set(Entry{ .directory = pde_entry }, masks.present)) {
-//         return PageError.NotMapped;
-//     }
-//
-//     if (masks.is_set(Entry{ .directory = pde_entry }, masks.page_size)) {
-//         @panic("todo!");
-//     }
-//
-//     const pte_addr = (pde_entry >> 12) & 0x03ff;
-//
-//     // Aha! This is the problem: pte_addr is the physical address of the page table,
-//     // but need to be able to translate that into a virtual address.
-//     // For now, we'll use our known mapping to fix this, but we'll switch to recursive mapping soon.
-//     const page_table: *[1024]DirectoryEntry align(FOUR_KB_SIZE) = @ptrFromInt(pte_addr + 0xC0000000);
-//
-//     const pte_index = (addr >> 12) & 0x03ff;
-//     Serial.printf("pte_index = 0x{x:08}\n", .{pte_index});
-//
-//     const pte = page_table[pte_index];
-//     if (!masks.is_set(Entry{ .table = pte }, masks.present)) {
-//         return PageError.NotMapped;
-//     }
-//
-//     const base_addr = pte & 0xFFFFF000;
-//     const page_offset = addr & 0x00000FFF;
-//     Serial.printf("base_addr = 0x{x:08}\n", .{base_addr});
-//     Serial.printf("page_offset = 0x{x:08}\n", .{page_offset});
-//
-//     return base_addr + page_offset;
-// }
-
-// pub fn mapSinglePageOld(phys: u32, virt: u32, flags: u32, size: Size) PageError!void {
-//     // if (!size.isAligned(phys) or !size.isAligned(virt)) return PageError.AddrNotAligned;
-//
-//     if (size == .four_mb) {
-//         // 4 MB pages are just a pointer to a page (so we don't need a page table)
-//         const pd_index = virt >> 22;
-//         // If we're here, then phys is already 4 MB aligned, so...
-//         directory[pd_index] = phys | masks.page_size | flags;
-//         return;
-//     }
-//
-//     // pd_index adjusts the offset in the *virtual* address space
-//     // in 4 MB chunks: 0 = 0 to 4MB, 1 = 4 to 8 MB, and so on.
-//     // Take the top 10 bits of my target virtual offset as the table index.
-//     const pd_index = virt >> 22;
-//     var table: Table align(FOUR_KB_SIZE) = blk: {
-//         // In theory, we should be able to just switch on whether directory[pd_index] is null
-//         // I chose this way because what the actual in-memory PDE says should be law,
-//         // and then if tables[pd_index] is null, we can have a crash to track down.
-//         if (directory[pd_index] & masks.present != 0) {
-//             break :blk tables[pd_index].?.*;
-//         } else {
-//             directory[pd_index] |= masks.present;
-//             break :blk Table{ .entries = .{0} ** 1024 };
-//         }
-//     };
-//
-//     const pt_index = (virt >> 12) & 0x03ff;
-//     if (table.entries[pt_index] & masks.present != 0) {
-//         return PageError.AlreadyMapped;
-//     }
-//
-//     // Set bits for address in top 20, then add the flags
-//     // Adjust the address by my base physical offset
-//     table.entries[pt_index] = ((pt_index << 12) + phys) | flags;
-//     tables[pd_index] = &table;
-//
-//     // @intFromPtr returns a virtual address since we're already mapped into the higher half.
-//     directory[pd_index] = (@intFromPtr(&table) - 0xC0000000) | flags;
-// }
-
 pub fn mapSinglePage(phys: u32, virt: u32, flags: u32, size: Size) PageError!void {
     if (!size.isAligned(phys) or !size.isAligned(virt)) return PageError.AddrNotAligned;
 
@@ -240,7 +160,6 @@ pub fn init() !void {
     if (boot.KERNEL_NUM_PAGES != 1) {
         @compileError("need to update to handle multiple pages");
     }
-
     try mapSinglePage(0x0000000, 0xC0000000, 3, .four_mb);
 
     const phys_addr: u32 = @intFromPtr(&directory) - 0xC0000000;
