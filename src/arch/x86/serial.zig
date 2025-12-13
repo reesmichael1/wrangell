@@ -1,8 +1,38 @@
 const arch = @import("arch.zig");
+const std = @import("std");
 
 const COM1_PORT: u16 = 0x3f8;
 
-pub const Serial = @import("writer.zig").Writer(writeByte);
+const Writer = @import("writer.zig").Writer;
+const SerialError = error{};
+
+pub const Serial = struct {
+    const WriterType = Writer(void, SerialError, putln);
+
+    // private instance
+    var writer_instance: WriterType = undefined;
+
+    pub fn init() void {
+        writer_instance = WriterType.init({});
+    }
+
+    pub fn printf(comptime fmt: []const u8, args: anytype) void {
+        // No 'self' required on API
+        writer_instance.printf(fmt, args);
+    }
+
+    pub fn writeln(msg: []const u8) void {
+        printf("{s}\n", .{msg});
+    }
+};
+
+fn putln(_: void, msg: []const u8) SerialError!usize {
+    for (msg) |ch| {
+        writeByte(ch);
+    }
+
+    return msg.len;
+}
 
 fn writeByte(char: u8) void {
     while ((arch.inb(COM1_PORT + 5) & 0x20) == 0) {}

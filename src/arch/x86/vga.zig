@@ -1,5 +1,3 @@
-const fmt = @import("std").fmt;
-
 const Serial = @import("serial.zig").Serial;
 const Modifier = @import("Keyboard.zig").Modifier;
 const arch = @import("arch.zig");
@@ -8,7 +6,42 @@ const VGA_WIDTH = 80;
 const VGA_HEIGHT = 25;
 const VGA_SIZE = VGA_WIDTH * VGA_HEIGHT;
 
-pub const Vga = @import("writer.zig").Writer(putChar);
+const std = @import("std");
+const IOWriter = std.io.Writer;
+
+const Writer = @import("writer.zig").Writer;
+const VGAError = error{};
+
+pub const Vga = struct {
+    const WriterType = Writer(void, VGAError, putln);
+
+    // private instance
+    var writer_instance: WriterType = undefined;
+
+    pub fn init() void {
+        writer_instance = WriterType.init({});
+    }
+
+    pub fn printf(comptime fmt: []const u8, args: anytype) void {
+        writer_instance.printf(fmt, args);
+    }
+
+    pub fn write(msg: []const u8) void {
+        printf("{s}", .{msg});
+    }
+
+    pub fn writeln(msg: []const u8) void {
+        printf("{s}\n", .{msg});
+    }
+};
+
+fn putln(_: void, msg: []const u8) error{}!usize {
+    for (msg) |ch| {
+        putChar(ch);
+    }
+
+    return msg.len;
+}
 
 pub const VgaColors = enum(u8) {
     black,

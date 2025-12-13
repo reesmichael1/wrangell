@@ -1,7 +1,9 @@
+const std = @import("std");
+const builtin = @import("builtin");
 const arch = @import("arch.zig");
 const multiboot = @import("../../multiboot.zig");
 
-const STACK_SIZE = 16 * 1024;
+const STACK_SIZE = if (builtin.mode == .Debug) 128 * 1024 else 16 * 1024;
 pub export var stack_bytes: [STACK_SIZE]u8 align(16) linksection(".bss.stack") = undefined;
 extern var KERNEL_ADDR_OFFSET: u32;
 pub const KERNEL_PAGE_NUMBER = 0xC0200000 >> 22;
@@ -10,6 +12,7 @@ pub const KERNEL_NUM_PAGES = 1;
 export var boot_page_directory align(4096) linksection(".text.boot") = init: {
     var dir: [1024]u32 = .{0} ** 1024;
 
+    // Identity map the lowest MB of memory
     // Bits set: 7, 1, 0 -> this page is present, 4MB, read/write, supervisor
     // The memory address bits are all 0, so this maps 0-4M -> 0-4M
     dir[0] = 0x83;
@@ -50,10 +53,8 @@ export fn _start() linksection(".text.boot") callconv(.Naked) noreturn {
 
 export fn start_higher_half() callconv(.Naked) noreturn {
     // Now we are mapped so that we can operate in the higher half
-    boot_page_directory[0] = 0;
 
     asm volatile (
-        \\ invlpg (0)
         \\ mov $stack_bytes, %%esp
         \\ add %[stack_size], %%esp
         // Increase the boot info address by the kernel offset (since we're now higher halved)

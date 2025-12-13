@@ -1,6 +1,7 @@
 const std = @import("std");
 const arch = @import("arch.zig").internals;
 const multiboot = @import("multiboot.zig");
+const kmalloc = @import("kmalloc.zig");
 
 comptime {
     const builtin = @import("builtin");
@@ -45,19 +46,22 @@ fn pageFault() noreturn {
 export fn kmain(magic: u32, info: *const multiboot.Info) noreturn {
     std.debug.assert(magic == multiboot.BOOTLOADER_MAGIC);
 
-    arch.init(info) catch @panic("error during architecture initialization");
-
+    const kernel_bytes = @intFromPtr(&KERNEL_PHYSADDR_END) - @intFromPtr(&KERNEL_PHYSADDR_START);
     arch.Serial.printf("kernel stack = {*} to {*}\n", .{ &KERNEL_STACK_START, &KERNEL_STACK_END });
-    arch.Serial.printf("kernel = {*} to {*}\n", .{ &KERNEL_PHYSADDR_START, &KERNEL_PHYSADDR_END });
+    arch.Serial.printf("kernel = {*} to {*} [{} KiB]\n", .{ &KERNEL_PHYSADDR_START, &KERNEL_PHYSADDR_END, kernel_bytes / 1024 });
+
     arch.Serial.printf("mem_lower = 0x{x:08}\n", .{info.mem_lower});
     arch.Serial.printf("mem_upper = 0x{x:08}\n", .{info.mem_upper});
 
+    arch.init(info) catch @panic("error during architecture initialization");
+
     arch.Vga.writeln("wrangell 0.0.1\n\n");
 
-    // pageFault();
-    // Demonstrate that paging is working (we mapped 0xA0000000 + 0x1000 in paging.zig)
-    const addr: *u8 = @ptrFromInt(0xA0000100);
-    addr.* = 100;
+    const addr2 = kmalloc.kmalloc(32) orelse @panic("allocation failed");
+    // const addr2 = 0xC0400000;
+    const vmem: *u32 = @ptrFromInt(addr2);
+    arch.Serial.printf("writing to 0x{x}\n", .{addr2});
+    vmem.* = 100;
 
     while (true) {
         arch.halt();

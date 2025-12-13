@@ -232,3 +232,7 @@ pub fn setIrqCallback(irq_line: u8, callback: *const IsrHandler) void {
     Serial.printf("mapping IRQ port 0x{x} to 0x{x}\n", .{ irq_line, ix });
     interrupt_handlers[ix] = callback;
 }
+
+pub fn isGateOpen(ix: u8) bool {
+    return entries[ix].present == 1;
+}

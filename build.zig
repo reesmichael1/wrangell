@@ -53,6 +53,8 @@ pub fn build(b: *std.Build) void {
         "stdio",
         "-m",
         "4G",
+        // "-d",
+        // "int",
         "-no-reboot",
         "-monitor",
         "telnet:localhost:4444,server,nowait",

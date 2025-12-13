@@ -1,32 +1,30 @@
 const std = @import("std");
-const IOWriter = @import("std").io.Writer;
-const Serial = @import("serial.zig").Serial;
+const IOWriter = std.io.Writer;
 
-pub fn Writer(putCharOuter: fn (u8) void) type {
+pub fn Writer(comptime ContextType: type, comptime ErrType: type, comptime Callback: fn (ContextType, []const u8) ErrType!usize) type {
     return struct {
-        const writer = IOWriter(void, error{}, callback){ .context = {} };
+        const Error = ErrType;
+        writer: IOWriter(ContextType, Error, Callback),
+        context: ContextType,
 
-        fn callback(_: void, string: []const u8) error{}!usize {
-            write(string);
-            return string.len;
+        const Self = @This();
+
+        pub fn init(context: ContextType) Self {
+            return Self{
+                .writer = IOWriter(ContextType, Error, Callback){
+                    .context = context,
+                },
+                .context = context,
+            };
         }
 
-        pub fn putChar(byte: u8) void {
-            putCharOuter(byte);
+        pub fn printf(self: *Self, comptime fmt: []const u8, args: anytype) void {
+            std.fmt.format(self.writer, fmt, args) catch unreachable;
         }
 
-        pub fn printf(comptime format: []const u8, args: anytype) void {
-            std.fmt.format(writer, format, args) catch unreachable;
-        }
-
-        pub fn write(data: []const u8) void {
-            for (data) |c| {
-                putCharOuter(c);
-            }
-        }
-
-        pub fn writeln(data: []const u8) void {
-            printf("{s}\n", .{data});
+        pub fn write(self: *Self, data: []const u8) Error!void {
+            _ = self.writer.writeAll(data);
+            return null;
         }
     };
 }

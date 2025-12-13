@@ -1,6 +1,7 @@
 const std = @import("std");
 
 const boot = @import("boot.zig");
+const pmem = @import("pmem.zig");
 const Serial = @import("serial.zig").Serial;
 
 const PD: *[1024]DirectoryEntry = @ptrFromInt(0xFFFFF000);
@@ -42,19 +43,23 @@ const Size = enum {
     }
 };
 
-const masks = struct {
-    const address: u32 = 0xFFFFF000;
-    const avl: u32 = 0xF00;
-    const page_size: u32 = 0x80;
-    const accessed: u32 = 0x20;
-    const cache_disabled: u32 = 0x10;
-    const write_through: u32 = 0x08;
-    const user_supervisor: u32 = 0x04;
-    const read_write: u32 = 0x02;
-    const dirty: u32 = 0x40;
-    const present: u32 = 0x01;
-    const pat: u32 = 0x80;
-    const global: u32 = 0x100;
+const Flags = enum(u32) {
+    present = 0b001,
+};
+
+pub const masks = struct {
+    pub const address: u32 = 0xFFFFF000;
+    pub const avl: u32 = 0xF00;
+    pub const page_size: u32 = 0x80;
+    pub const accessed: u32 = 0x20;
+    pub const cache_disabled: u32 = 0x10;
+    pub const write_through: u32 = 0x08;
+    pub const user_supervisor: u32 = 0x04;
+    pub const read_write: u32 = 0x02;
+    pub const dirty: u32 = 0x40;
+    pub const present: u32 = 0x01;
+    pub const pat: u32 = 0x80;
+    pub const global: u32 = 0x100;
 
     fn is_set(entry: Entry, mask: u32) bool {
         return entry.value() & mask != 0;
@@ -83,14 +88,17 @@ const empty_table = Table{
 };
 
 var directory: [1024]DirectoryEntry align(FOUR_KB_SIZE) = .{0} ** 1024;
-var tables: [1024]?*Table align(FOUR_KB_SIZE) = .{null} ** 1024;
-var new_table: [1024]DirectoryEntry align(FOUR_KB_SIZE) = .{2} ** 1024;
 
 pub const PageError = error{
     AlreadyMapped,
     AddrNotAligned,
     NotMapped,
+    OutOfMemory,
 };
+
+fn pageDirectoryIndexToPhysAddr(index: u32) u32 {
+    return 0xFFC00000 + 0x1000 * index;
+}
 
 pub fn virtToPhys(virt: u32) PageError!u32 {
     const pd_index = virt >> 22;
@@ -101,7 +109,7 @@ pub fn virtToPhys(virt: u32) PageError!u32 {
         return PageError.NotMapped;
     }
 
-    const pt: *[1024]DirectoryEntry = @ptrFromInt(0xFFC00000 + 0x1000 * pd_index);
+    const pt: *[1024]DirectoryEntry = @ptrFromInt(pageDirectoryIndexToPhysAddr(pd_index));
     if (pt[pt_index] & masks.present == 0) {
         return PageError.NotMapped;
     }
@@ -124,18 +132,35 @@ pub fn mapSinglePage(phys: u32, virt: u32, flags: u32, size: Size) PageError!voi
     const pt_index = virt >> 12 & 0x03ff;
 
     var pd: *[1024]DirectoryEntry align(FOUR_KB_SIZE) = @ptrFromInt(0xFFFFF000);
-
-    Serial.printf("old directory addr = 0x{x:08}\n", .{@intFromPtr(&directory)});
-    Serial.printf("new directory addr = 0x{x:08}\n", .{@intFromPtr(pd)});
-
     var pt: *[1024]DirectoryEntry align(FOUR_KB_SIZE) = blk: {
         if (pd[pd_index] & masks.present != 0) {
-            const pt: *[1024]DirectoryEntry align(FOUR_KB_SIZE) = @ptrFromInt(0xFFC00000 + 0x400 * pd_index);
+            const pt: *[1024]DirectoryEntry align(FOUR_KB_SIZE) = @ptrFromInt(pageDirectoryIndexToPhysAddr(pd_index));
             break :blk pt;
         } else {
-            // This is it! When we initialize, we need to specify the address
-            pd[pd_index] |= ((@intFromPtr(&new_table) - 0xC0000000) | flags | masks.present);
-            break :blk &new_table;
+            // First we allocate a page from the physical memory manager
+            // We can then update the page directory to point to this page,
+            // which we also initialize as an empty page table.
+            const page_phys = pmem.alloc() catch |err| {
+                switch (err) {
+                    pmem.PmemError.OutOfMemory => return PageError.OutOfMemory,
+                }
+            };
+
+            // Set the PD entry to point to the new page table
+            pd[pd_index] = page_phys | flags | masks.present;
+
+            // Flush TLB so the CPU knows about the new PD entry
+            asm volatile (
+                \\ mov %%cr3, %%eax
+                \\ mov %%eax, %%cr3
+                ::: "eax", "cr3");
+
+            const pt: *[1024]DirectoryEntry = @ptrFromInt(pageDirectoryIndexToPhysAddr(pd_index));
+            for (pt) |*entry| {
+                entry.* = 0;
+            }
+
+            break :blk pt;
         }
     };
 
@@ -150,9 +175,10 @@ pub fn init() !void {
     Serial.writeln("initializing page directory");
     defer Serial.printf("initialized paging with page directory: {*}\n", .{&directory});
 
+    // Initialize all entries as not present
     for (&directory) |*num| {
         const entry = Entry{ .directory = num.* };
-        // Not present, supervisor mode, read/write
+        // // Not present, supervisor mode, read/write
         num.* = masks.set(entry, masks.read_write).value();
     }
 
@@ -160,37 +186,19 @@ pub fn init() !void {
     if (boot.KERNEL_NUM_PAGES != 1) {
         @compileError("need to update to handle multiple pages");
     }
-    try mapSinglePage(0x0000000, 0xC0000000, 3, .four_mb);
 
+    directory[768] = 0x83; // | flags | (1 << 7); // 4 MiB page flag
     const phys_addr: u32 = @intFromPtr(&directory) - 0xC0000000;
 
     // Set up recursive mapping so that we can easily look up pages
     std.debug.assert(std.mem.isAligned(phys_addr, FOUR_KB_SIZE));
     directory[directory.len - 1] = phys_addr | 0x3;
 
+    // Replace the original page table with the updated one
     asm volatile (
         \\ mov %[dir], %cr3
         :
         : [dir] "{eax}" (phys_addr),
         : "eax", "cr3"
     );
-
-    try mapSinglePage(0x0800b000, 0xA0000000, 3, .four_kb);
-
-    asm volatile (
-        \\ mov %%cr3, %%eax
-        \\ mov %%eax, %%cr3
-        ::: "eax", "cr3");
-
-    const test_addr = 0xA0000823;
-    const addr = virtToPhys(test_addr) catch |err| blk: {
-        switch (err) {
-            PageError.NotMapped => {
-                Serial.printf("0x{x:08} was not mapped\n", .{test_addr});
-                break :blk 0;
-            },
-            else => @panic("error while translating memory"),
-        }
-    };
-    Serial.printf("addr = 0x{x:08}\n", .{addr});
 }

@@ -1,8 +1,8 @@
 const multiboot = @import("../../multiboot.zig");
 const gdt = @import("gdt.zig");
 const idt = @import("idt.zig");
-const paging = @import("paging.zig");
-const pmem = @import("pmem.zig");
+pub const vmem = @import("vmem.zig");
+pub const pmem = @import("pmem.zig");
 const pic = @import("pic.zig");
 const serial = @import("serial.zig");
 const vga = @import("vga.zig");
@@ -113,8 +113,14 @@ pub fn init(info: *const multiboot.Info) !void {
     idt.init();
     enableInterrupts();
 
+    vmem.init() catch |err| switch (err) {
+        vmem.PageError.OutOfMemory => {
+            Serial.writeln("out of memory");
+            return err;
+        },
+        else => return err,
+    };
     pmem.init(info);
-    try paging.init();
 
     Timer.init(50);
     Keyboard.init();

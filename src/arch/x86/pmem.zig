@@ -11,7 +11,7 @@ const PAGE_SIZE = 4096;
 const PAGE_COUNT = (MAX_PHYS_ADDR + 1) / PAGE_SIZE;
 const BITMAP_SIZE = PAGE_COUNT / 8; // 8 pages in one byte
 
-var bitmap: [BITMAP_SIZE]u8 = .{0} ** BITMAP_SIZE;
+var bitmap: [BITMAP_SIZE]u8 = [_]u8{0xFF} ** BITMAP_SIZE;
 
 extern var KERNEL_PHYSADDR_START: u32;
 extern var KERNEL_PHYSADDR_END: u32;
@@ -19,7 +19,7 @@ extern var KERNEL_ADDR_OFFSET: *const u32;
 extern var KERNEL_STACK_START: u32;
 extern var KERNEL_STACK_END: u32;
 
-const PmemError = error{OutOfMemory};
+pub const PmemError = error{OutOfMemory};
 
 fn getByteAndBit(addr: usize) struct { usize, u3 } {
     return .{ addr / 8, @intCast(addr % 8) };
@@ -63,6 +63,7 @@ fn reserveRegion(start: usize, end: usize) void {
 }
 
 /// Find the next free page
+/// Returns a *physical* address.
 pub fn alloc() PmemError!u32 {
     for (0.., &bitmap) |i, *entry| {
         if (entry.* != 0xFF) {
@@ -77,8 +78,10 @@ pub fn alloc() PmemError!u32 {
 }
 
 pub fn init(info: *const multiboot.Info) void {
-    Serial.printf("mmap_addr is at 0x{x:08}\n", .{info.mmap_addr});
+    Serial.writeln("begining pmem initialization");
+    defer Serial.writeln("done with pmem initialization");
 
+    Serial.printf("mmap_addr is at 0x{x:08}\n", .{info.mmap_addr});
     if (multiboot.Flags.hasFlag(.name, info.flags)) {
         Serial.printf("boot loader name at 0x{x}\n", .{info.boot_loader_name});
 
@@ -93,13 +96,9 @@ pub fn init(info: *const multiboot.Info) void {
         @panic("no memory map in multiboot header");
     }
 
-    // Start by marking all pages as used
-    for (&bitmap) |*entry| {
-        entry.* = 0xFF;
-    }
-
     var offset: usize = 0;
     Serial.writeln("parsing memmap from multiboot info");
+
     while (offset < info.mmap_length) {
         const entry: *align(4) multiboot.MmapEntry = @ptrFromInt(info.mmap_addr + offset + 0xC0000000);
         Serial.printf("type = {}, base_addr = 0x{x}, len = 0x{x}\n", .{ entry.type, entry.addr, entry.len });
@@ -113,10 +112,13 @@ pub fn init(info: *const multiboot.Info) void {
         offset += entry.size + 4;
     }
 
+    // Reserve lowest megabyte
+    Serial.writeln("reserving lowest megabyte of kernel");
     reserveRegion(0, ONE_MB);
+    Serial.printf("reserving kernel: 0x{x:08} to 0x{x:08}\n", .{ @intFromPtr(&KERNEL_PHYSADDR_START), @intFromPtr(&KERNEL_PHYSADDR_END) });
     reserveRegion(@intFromPtr(&KERNEL_PHYSADDR_START), @intFromPtr(&KERNEL_PHYSADDR_END));
-    reserveRegion(@intFromPtr(&KERNEL_STACK_START), @intFromPtr(&KERNEL_STACK_END));
-    reserveRegion(PAGE_TABLE_START, PAGE_TABLE_END);
+    Serial.printf("reserving stack: 0x{x:08} to 0x{x:08}\n", .{ @intFromPtr(&KERNEL_STACK_START), @intFromPtr(&KERNEL_STACK_END) });
+    reserveRegion(@intFromPtr(&KERNEL_STACK_START) - 0xC0000000, @intFromPtr(&KERNEL_STACK_END) - 0xC0000000);
 
     var total_free_pages: usize = 0;
     for (bitmap) |entry| {
