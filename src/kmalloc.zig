@@ -1,9 +1,11 @@
 const arch = @import("arch.zig").internals;
+const Serial = arch.Serial;
 
 const PAGE_SIZE = 4096;
 
 const HEAP_START = 0xC0400000;
-const HEAP_END = 0xC0800000;
+const HEAP_SIZE = 4 * 1024 * 1024; // 4 MB
+const HEAP_END = HEAP_START + HEAP_SIZE;
 
 var heap_top: u32 = HEAP_START;
 

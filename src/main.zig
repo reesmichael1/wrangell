@@ -58,10 +58,13 @@ export fn kmain(magic: u32, info: *const multiboot.Info) noreturn {
     arch.Vga.writeln("wrangell 0.0.1\n\n");
 
     const addr2 = kmalloc.kmalloc(32) orelse @panic("allocation failed");
-    // const addr2 = 0xC0400000;
-    const vmem: *u32 = @ptrFromInt(addr2);
+    // const addr2 = 0xC0400000
+    const vmem: *[32]u8 = @ptrFromInt(addr2);
     arch.Serial.printf("writing to 0x{x}\n", .{addr2});
-    vmem.* = 100;
+
+    for (vmem) |*val| {
+        val.* = 1;
+    }
 
     while (true) {
         arch.halt();

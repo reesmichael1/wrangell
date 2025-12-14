@@ -69,8 +69,10 @@ pub fn alloc() PmemError!u32 {
         if (entry.* != 0xFF) {
             // There is an unset bit in this entry
             const first: u3 = @truncate(@clz(~entry.*));
-            entry.* |= @as(u8, 1) << first;
-            return (i * 8 + (7 - first)) * PAGE_SIZE;
+            const bit_index = 7 - first;
+            const page_addr = (i * 8 + bit_index) * PAGE_SIZE;
+            entry.* |= @as(u8, 1) << bit_index;
+            return page_addr;
         }
     }
 
