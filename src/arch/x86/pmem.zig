@@ -98,34 +98,51 @@ pub fn init(info: *const multiboot.Info) void {
         @panic("no memory map in multiboot header");
     }
 
-    var offset: usize = 0;
-    Serial.writeln("parsing memmap from multiboot info");
+    Serial.printf("parsing memmap from multiboot info at 0x{x:08}, length = {}\n", .{ info.mmap_addr, info.mmap_length });
 
-    while (offset < info.mmap_length) {
-        const entry: *align(4) multiboot.MmapEntry = @ptrFromInt(info.mmap_addr + offset + 0xC0000000);
-        Serial.printf("type = {}, base_addr = 0x{x}, len = 0x{x}\n", .{ entry.type, entry.addr, entry.len });
-        if (entry.type == .available) {
-            if (entry.addr + entry.len < 0x100000000) {
-                freeRegion(@intCast(entry.addr), @intCast(entry.addr + entry.len));
-            } else if (entry.addr < 0x10000000) {
-                freeRegion(@intCast(entry.addr), 0xFFFFFFFF);
+    // Store information from memmap so that we can safely reuse that memory later
+    const MemRegion = struct { addr: u64, len: u64, available: bool };
+    var regions: [32]MemRegion = undefined;
+    var num_regions: usize = 0;
+
+    var offset: usize = 0;
+    while (offset < info.mmap_length and num_regions < regions.len) {
+        const entry: *align(4) const multiboot.MmapEntry = @ptrFromInt(info.mmap_addr + offset + 0xC0000000);
+        regions[num_regions] = .{
+            .addr = entry.addr,
+            .len = entry.len,
+            .available = entry.type == .available,
+        };
+        offset += entry.size + 4;
+        num_regions += 1;
+    }
+
+    // Now that we've parsed all of the information, we can free the memory it describes.
+    for (regions[0..num_regions]) |region| {
+        if (region.available) {
+            if (region.addr + region.len < 0x100000000) {
+                freeRegion(@intCast(region.addr), @intCast(region.addr + region.len));
+            } else if (region.addr < 0x10000000) {
+                freeRegion(@intCast(region.addr), 0xFFFFFFFF);
             }
         }
-        offset += entry.size + 4;
     }
 
-    // Reserve lowest megabyte
-    Serial.writeln("reserving lowest megabyte of kernel");
-    reserveRegion(0, ONE_MB);
+    Serial.writeln("reserving lowest two megabytes");
+    reserveRegion(0, ONE_MB + ONE_MB);
     Serial.printf("reserving kernel: 0x{x:08} to 0x{x:08}\n", .{ @intFromPtr(&KERNEL_PHYSADDR_START), @intFromPtr(&KERNEL_PHYSADDR_END) });
     reserveRegion(@intFromPtr(&KERNEL_PHYSADDR_START), @intFromPtr(&KERNEL_PHYSADDR_END));
-    Serial.printf("reserving stack: 0x{x:08} to 0x{x:08}\n", .{ @intFromPtr(&KERNEL_STACK_START), @intFromPtr(&KERNEL_STACK_END) });
-    reserveRegion(@intFromPtr(&KERNEL_STACK_START) - 0xC0000000, @intFromPtr(&KERNEL_STACK_END) - 0xC0000000);
+
+    const stack_phys_start = @intFromPtr(&KERNEL_STACK_START) - 0xC0000000;
+    const stack_phys_end = @intFromPtr(&KERNEL_STACK_END) - 0xC0000000;
+    Serial.printf("reserving stack: 0x{x:08} to 0x{x:08}\n", .{ stack_phys_start, stack_phys_end });
+    reserveRegion(stack_phys_start, stack_phys_end);
 
     var total_free_pages: usize = 0;
-    for (bitmap) |entry| {
-        total_free_pages += 8 - @popCount(entry);
+    // For some reason, using a for (bitmap) loop here crashes in the Release.* modes
+    var i: usize = 0;
+    while (i < bitmap.len) : (i += 1) {
+        total_free_pages += 8 - @popCount(bitmap[i]);
     }
-
     Serial.printf("total free pages: {}\n", .{total_free_pages});
 }
