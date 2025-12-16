@@ -57,13 +57,20 @@ export fn kmain(magic: u32, info: *const multiboot.Info) noreturn {
 
     arch.Vga.writeln("wrangell 0.0.1\n\n");
 
-    const addr2 = kmalloc.kmalloc(32) orelse @panic("allocation failed");
-    // const addr2 = 0xC0400000
-    const vmem: *[32]u8 = @ptrFromInt(addr2);
+    const addr2 = kmalloc.kmalloc(2048) orelse @panic("allocation failed");
+    const vmem: *[2048]u8 = @ptrFromInt(addr2);
     arch.Serial.printf("writing to 0x{x}\n", .{addr2});
 
     for (vmem) |*val| {
         val.* = 1;
+    }
+
+    const addr3 = kmalloc.kmalloc(4096) orelse @panic("allocation failed");
+    arch.Serial.printf("writing to 0x{x}\n", .{addr3});
+    const vmem2: *[4096]u8 = @ptrFromInt(addr2);
+
+    for (vmem2) |*val| {
+        val.* = 2;
     }
 
     while (true) {
@@ -78,6 +85,5 @@ pub fn panic(msg: []const u8, _: ?*std.builtin.StackTrace, _: ?usize) noreturn {
         writeln(msg);
     }
 
-    // arch.haltNoInterrupts();
     arch.spinWait();
 }
