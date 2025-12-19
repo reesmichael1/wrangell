@@ -2,6 +2,7 @@ const std = @import("std");
 const arch = @import("arch.zig").internals;
 const multiboot = @import("multiboot.zig");
 const kmalloc = @import("kmalloc.zig");
+const Kvotigi = @import("Kvotigi.zig");
 
 comptime {
     const builtin = @import("builtin");
@@ -72,6 +73,12 @@ export fn kmain(magic: u32, info: *const multiboot.Info) noreturn {
     for (vmem2) |*val| {
         val.* = 2;
     }
+
+    var kvotigi = Kvotigi.init();
+    var map = std.StringHashMap(u8).init(kvotigi.allocator());
+    map.put("hello world!", 1) catch unreachable;
+
+    arch.Serial.printf("map['hello world!'] = {d}\n", .{map.get("hello world!").?});
 
     while (true) {
         arch.halt();
