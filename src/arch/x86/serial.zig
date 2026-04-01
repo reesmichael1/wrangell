@@ -3,36 +3,39 @@ const std = @import("std");
 
 const COM1_PORT: u16 = 0x3f8;
 
-const Writer = @import("writer.zig").Writer;
-const SerialError = error{};
-
 pub const Serial = struct {
-    const WriterType = Writer(void, SerialError, putln);
+    pub fn initInterface() std.Io.Writer {
+        return .{
+            .vtable = &.{
+                .drain = drain,
+            },
+            .buffer = &.{},
+        };
+    }
 
-    // private instance
-    var writer_instance: WriterType = undefined;
+    fn drain(_: *std.Io.Writer, data: []const []const u8, splat: usize) std.Io.Writer.Error!usize {
+        _ = splat;
 
-    pub fn init() void {
-        writer_instance = WriterType.init({});
+        var count: usize = 0;
+        for (data) |chunk| {
+            for (chunk) |ch| {
+                writeByte(ch);
+                count += 1;
+            }
+        }
+
+        return count;
     }
 
     pub fn printf(comptime fmt: []const u8, args: anytype) void {
-        // No 'self' required on API
-        writer_instance.printf(fmt, args);
+        var w = initInterface();
+        w.print(fmt, args) catch unreachable;
     }
 
     pub fn writeln(msg: []const u8) void {
         printf("{s}\n", .{msg});
     }
 };
-
-fn putln(_: void, msg: []const u8) SerialError!usize {
-    for (msg) |ch| {
-        writeByte(ch);
-    }
-
-    return msg.len;
-}
 
 fn writeByte(char: u8) void {
     while ((arch.inb(COM1_PORT + 5) & 0x20) == 0) {}

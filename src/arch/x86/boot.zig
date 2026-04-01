@@ -29,7 +29,7 @@ export var boot_page_directory align(4096) linksection(".text.boot") = init: {
 
 extern fn kmain(magic: u32, info: *const multiboot.Info) void;
 
-export fn _start() linksection(".text.boot") callconv(.Naked) noreturn {
+export fn _start() linksection(".text.boot") callconv(.naked) noreturn {
     asm volatile (
     // Enable paging with higher half mapping
         \\ .extern boot_page_directory
@@ -48,10 +48,10 @@ export fn _start() linksection(".text.boot") callconv(.Naked) noreturn {
 
         // Enter the kernel at a higher half address
         \\ jmp start_higher_half
-        ::: "ecx", "cr3", "cr0");
+        ::: .{ .ecx = true });
 }
 
-export fn start_higher_half() callconv(.Naked) noreturn {
+export fn start_higher_half() callconv(.naked) noreturn {
     // Now we are mapped so that we can operate in the higher half
 
     asm volatile (

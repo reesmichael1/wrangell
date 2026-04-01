@@ -90,7 +90,6 @@ pub fn init(info: *const multiboot.Info) void {
         const name: [*:0]u8 = @ptrFromInt(info.boot_loader_name + 0xC0000000);
         var buf: [100]u8 = undefined;
         const display = std.fmt.bufPrint(&buf, "{s}", .{name}) catch unreachable;
-
         Serial.printf("boot loader name = {s}\n", .{display});
     }
 

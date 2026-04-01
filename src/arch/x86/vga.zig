@@ -1,29 +1,39 @@
 const Serial = @import("serial.zig").Serial;
 const Modifier = @import("Keyboard.zig").Modifier;
 const arch = @import("arch.zig");
+const std = @import("std");
 
 const VGA_WIDTH = 80;
 const VGA_HEIGHT = 25;
 const VGA_SIZE = VGA_WIDTH * VGA_HEIGHT;
 
-const std = @import("std");
-const IOWriter = std.io.Writer;
-
-const Writer = @import("writer.zig").Writer;
-const VGAError = error{};
-
 pub const Vga = struct {
-    const WriterType = Writer(void, VGAError, putln);
+    pub fn initInterface() std.Io.Writer {
+        return .{
+            .vtable = &.{
+                .drain = drain,
+            },
+            .buffer = &.{},
+        };
+    }
 
-    // private instance
-    var writer_instance: WriterType = undefined;
+    fn drain(_: *std.Io.Writer, data: []const []const u8, splat: usize) std.Io.Writer.Error!usize {
+        _ = splat;
 
-    pub fn init() void {
-        writer_instance = WriterType.init({});
+        var count: usize = 0;
+        for (data) |chunk| {
+            for (chunk) |ch| {
+                putChar(ch);
+                count += 1;
+            }
+        }
+
+        return count;
     }
 
     pub fn printf(comptime fmt: []const u8, args: anytype) void {
-        writer_instance.printf(fmt, args);
+        var w = initInterface();
+        w.print(fmt, args) catch unreachable;
     }
 
     pub fn write(msg: []const u8) void {
@@ -34,14 +44,6 @@ pub const Vga = struct {
         printf("{s}\n", .{msg});
     }
 };
-
-fn putln(_: void, msg: []const u8) error{}!usize {
-    for (msg) |ch| {
-        putChar(ch);
-    }
-
-    return msg.len;
-}
 
 pub const VgaColors = enum(u8) {
     black,

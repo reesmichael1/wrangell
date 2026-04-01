@@ -153,7 +153,7 @@ pub fn mapSinglePage(phys: u32, virt: u32, flags: u32, size: Size) PageError!voi
             asm volatile (
                 \\ mov %%cr3, %%eax
                 \\ mov %%eax, %%cr3
-                ::: "eax", "cr3");
+                ::: .{ .eax = true });
 
             const pt: *[1024]DirectoryEntry = @ptrFromInt(pageDirectoryIndexToPhysAddr(pd_index));
             for (pt) |*entry| {
@@ -199,6 +199,5 @@ pub fn init() !void {
         \\ mov %[dir], %cr3
         :
         : [dir] "{eax}" (phys_addr),
-        : "eax", "cr3"
-    );
+        : .{ .eax = true });
 }

@@ -29,8 +29,7 @@ fn divideByZero() noreturn {
         : [_] "={ax}" (-> u8),
         : [a] "{ax}" (a),
           [b] "{cx}" (b),
-        : "ax", "cx", "dx"
-    );
+        : .{ .ax = true, .cx = true, .dx = true });
     arch.Vga.printf("answer = {}\n", .{answer});
 
     unreachable;

@@ -62,7 +62,7 @@ fn exceptionHandler() noreturn {
     arch.iret();
 }
 
-pub const InterruptHandler = fn () callconv(.Naked) void;
+pub const InterruptHandler = fn () callconv(.naked) void;
 pub const IsrHandler = fn (CpuState) void;
 
 pub const CpuState = extern struct {
@@ -110,7 +110,7 @@ export fn irqHandler(cpu: CpuState) void {
 fn getIrqStub(int_no: u8) InterruptHandler {
     // int_no is the mapped IRQ number (i.e., 32 for IRQ 0)
     return struct {
-        fn func() callconv(.Naked) void {
+        fn func() callconv(.naked) void {
             asm volatile (
                 \\ cli
                 \\ pushl $0
@@ -129,7 +129,7 @@ fn getIrqStub(int_no: u8) InterruptHandler {
 
 fn getInterruptStub(int_no: u8) InterruptHandler {
     return struct {
-        fn func() callconv(.Naked) void {
+        fn func() callconv(.naked) void {
             asm volatile ("cli");
 
             if (!exceptions[int_no].has_error) {
