@@ -28,13 +28,34 @@ pub fn build(b: *std.Build) void {
 
     const optimize = b.standardOptimizeOption(.{});
 
+    // Some temporary shims to run bryce until we have a proper ELF loader
+    const bryce_mod = b.createModule(.{
+        .root_source_file = b.path("bryce/init.zig"),
+        .target = b.resolveTargetQuery(kernel_query),
+        .optimize = optimize,
+        .code_model = .kernel,
+    });
+    const bryce = b.addObject(.{
+        .name = "init",
+        .root_module = bryce_mod,
+    });
+    const ld_cmd = b.addSystemCommand(&.{ "ld", "-m", "elf_i386", "-T" });
+    ld_cmd.addFileArg(b.path("bryce/linker.ld"));
+    ld_cmd.addArg("-o");
+    const bryce_elf = ld_cmd.addOutputFileArg("init.elf");
+    ld_cmd.addFileArg(bryce.getEmittedBin());
+
     const exe_mod = b.createModule(.{
         .root_source_file = b.path("src/main.zig"),
         .target = b.resolveTargetQuery(kernel_query),
         .optimize = optimize,
         .code_model = .kernel,
     });
-    exe_mod.addAnonymousImport("init_bin", .{ .root_source_file = b.path("bryce/init.bin") });
+    const bryce_bin = b.addObjCopy(bryce_elf, .{
+        .format = .bin,
+        .basename = "init.bin",
+    });
+    exe_mod.addAnonymousImport("init_bin", .{ .root_source_file = bryce_bin.getOutput() });
 
     const kernel = b.addExecutable(.{
         .name = "wrangell",
