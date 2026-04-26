@@ -20,7 +20,6 @@ pub fn build(b: *std.Build) void {
     const kernel_query = std.Target.Query{
         .cpu_arch = .x86,
         .cpu_model = .{ .explicit = &std.Target.x86.cpu.i386 },
-        // .cpu_model = .native,
         .os_tag = .freestanding,
         .abi = .none,
         .cpu_features_sub = disabled_features,
@@ -35,6 +34,7 @@ pub fn build(b: *std.Build) void {
         .optimize = optimize,
         .code_model = .kernel,
     });
+    exe_mod.addAnonymousImport("init_bin", .{ .root_source_file = b.path("bryce/init.bin") });
 
     const kernel = b.addExecutable(.{
         .name = "wrangell",

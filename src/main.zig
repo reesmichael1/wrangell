@@ -79,6 +79,18 @@ export fn kmain(magic: u32, info: *const multiboot.Info) noreturn {
 
     arch.Serial.printf("map['hello world!'] = {d}\n", .{map.get("hello world!").?});
 
+    const phys_addr = arch.pmem.alloc() catch unreachable;
+    arch.vmem.mapSinglePage(phys_addr, 0xB0000000, arch.vmem.masks.present | arch.vmem.masks.user_supervisor, .four_kb) catch unreachable;
+
+    // TODO: make a proper user stack (catch page faults, etc.)
+    const user_stack_addr = arch.pmem.alloc() catch unreachable;
+    arch.vmem.mapSinglePage(user_stack_addr, 0xB0001000, arch.vmem.masks.present | arch.vmem.masks.user_supervisor | arch.vmem.masks.read_write, .four_kb) catch unreachable;
+    const prog_mem: *[4096]u8 = @ptrFromInt(0xB0000000);
+    const init = @embedFile("init_bin");
+    @memcpy(prog_mem[0..init.len], init);
+
+    arch.enterUserMode(0xB0000000, 0xB0002000);
+
     while (true) {
         arch.halt();
     }

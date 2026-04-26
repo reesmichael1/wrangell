@@ -147,7 +147,9 @@ pub fn mapSinglePage(phys: u32, virt: u32, flags: u32, size: Size) PageError!voi
             };
 
             // Set the PD entry to point to the new page table
-            pd[pd_index] = page_phys | flags | masks.present;
+            // Intentionally set permissive flags on the PDE,
+            // leaving tighter restrictions to the PTE.
+            pd[pd_index] = page_phys | masks.present | masks.user_supervisor | masks.read_write;
 
             // Flush TLB so the CPU knows about the new PD entry
             asm volatile (
@@ -178,7 +180,7 @@ pub fn init() !void {
     // Initialize all entries as not present
     for (&directory) |*num| {
         const entry = Entry{ .directory = num.* };
-        // // Not present, supervisor mode, read/write
+        // Not present, supervisor mode, read/write
         num.* = masks.set(entry, masks.read_write).value();
     }
 
@@ -199,5 +201,5 @@ pub fn init() !void {
         \\ mov %[dir], %cr3
         :
         : [dir] "{eax}" (phys_addr),
-        : .{ .eax = true });
+    );
 }

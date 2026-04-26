@@ -64,6 +64,14 @@ pub fn lgdt(ptr: *const gdt.GdtPtr) void {
     );
 }
 
+pub fn ltr(selector: u32) void {
+    asm volatile (
+        \\ ltr %%ax
+        :
+        : [s] "{eax}" (selector),
+    );
+}
+
 pub fn halt() void {
     asm volatile ("hlt");
 }
@@ -99,6 +107,43 @@ pub fn inb(port: u16) u8 {
         : [ret] "={al}" (-> u8),
         : [port] "N{dx}" (port),
     );
+}
+
+/// `sp` should be the end of the stack page
+pub fn enterUserMode(ip: u32, sp: u32) noreturn {
+    asm volatile (
+    // Set the user data segments
+    // 0x23 = user data selector, RPL = 3
+        \\ mov $0x23, %%ax
+        \\ mov %%ax, %%ds
+        \\ mov %%ax, %%es
+        \\ mov %%ax, %%fs
+        \\ mov %%ax, %%gs
+        // Build the iret frame:
+        // EIP, CS, EFLAGS, ESP, SS
+        \\ push $0x23
+        \\ push %[sp]
+        // EFLAGS = reserved, IF = 1, IOPL = 0
+        \\ push $0x202
+        // 0x18 (user code selector) | 3 (RPL)
+        \\ push $0x1b
+        \\ push %[ip]
+        // Zero out general purpose registers
+        // to avoid leaking information into user mode
+        \\ xor %%eax, %%eax
+        \\ xor %%ebx, %%ebx
+        \\ xor %%ecx, %%ecx
+        \\ xor %%edx, %%edx
+        \\ xor %%esi, %%esi
+        \\ xor %%edi, %%edi
+        \\ xor %%ebp, %%ebp
+        // Pop the frame and enter ring 3
+        \\ iret
+        :
+        : [sp] "{ebx}" (sp),
+          [ip] "{ecx}" (ip),
+        : .{ .eax = true, .edx = true, .esi = true, .edi = true, .ebp = true });
+    unreachable;
 }
 
 pub fn init(info: *const multiboot.Info) !void {

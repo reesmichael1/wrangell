@@ -1,6 +1,8 @@
 const arch = @import("arch.zig");
 const Serial = @import("serial.zig").Serial;
 
+extern var KERNEL_STACK_START: u32;
+
 const DescriptorType = enum(u1) {
     system,
     code_data,
@@ -56,20 +58,24 @@ const GdtEntry = packed struct {
     access: AccessByte,
     flags: Flags,
 
-    fn to_int(comptime self: GdtEntry) u64 {
+    fn toInt(comptime self: GdtEntry) u64 {
         comptime {
-            const base_high: u64 = @as(u64, self.base & 0xFF000000) << 32;
-            const base_low: u24 = @truncate(self.base);
-            const limit_high: u52 = @as(u64, self.limit & 0xF0000) << 32;
-            const limit_low: u16 = @truncate(self.limit);
-            const flags_bits: u4 = @bitCast(self.flags);
-            const access_bits: u8 = @bitCast(self.access);
-
-            const flags: u56 = @as(u56, flags_bits) << 52;
-            const access: u48 = @as(u48, access_bits) << 40;
-
-            return base_high | flags | limit_high | access | base_low | limit_low;
+            return toIntRuntime(self);
         }
+    }
+
+    fn toIntRuntime(self: GdtEntry) u64 {
+        const base_high: u64 = @as(u64, self.base & 0xFF000000) << 32;
+        const base_low: u64 = @as(u64, self.base & 0xFFFFFF) << 16;
+        const limit_high: u52 = @as(u52, self.limit & 0xF0000) << 32;
+        const limit_low: u16 = @truncate(self.limit);
+        const flags_bits: u4 = @bitCast(self.flags);
+        const access_bits: u8 = @bitCast(self.access);
+
+        const flags: u56 = @as(u56, flags_bits) << 52;
+        const access: u48 = @as(u48, access_bits) << 40;
+
+        return base_high | flags | limit_high | access | base_low | limit_low;
     }
 };
 
@@ -163,15 +169,70 @@ const user_mode_data_entry = GdtEntry{
     .flags = paging_32_bit,
 };
 
+const TssEntry = packed struct {
+    prev_tss: u32 = 0,
+    esp0: u32,
+    ss0: u32,
+    _esp1: u32 = 0,
+    _ss1: u32 = 0,
+    _esp2: u32 = 0,
+    _ss2: u32 = 0,
+    _cr3: u32 = 0,
+    _eip: u32 = 0,
+    _eflags: u32 = 0,
+    _eax: u32 = 0,
+    _ecx: u32 = 0,
+    _edx: u32 = 0,
+    _ebx: u32 = 0,
+    _esp: u32 = 0,
+    _ebp: u32 = 0,
+    _esi: u32 = 0,
+    _edi: u32 = 0,
+    _es: u32 = 0,
+    _cs: u32 = 0x0b,
+    _ss: u32 = 0x13,
+    _ds: u32 = 0x13,
+    _fs: u32 = 0x13,
+    _gs: u32 = 0x13,
+    _ldt: u32 = 0,
+    _trap: u16 = 0,
+    _iomap_base: u16 = 0,
+};
+
 pub const NULL_SELECTOR = 0x0;
 pub const KERNEL_CODE_SELECTOR = 0x08;
 pub const KERNEL_DATA_SELECTOR = 0x10;
 pub const USER_CODE_SELECTOR = 0x18;
 pub const USER_DATA_SELECTOR = 0x20;
+pub const TSS_CODE_SELECTOR = 0x28;
+
+var tss_entry: TssEntry = undefined;
 
 // Store entires as u64s instead of GdtEntries because we need to convert into the weird data format
 // in memory (instead of the sane version the packed u64 would give us)
-pub const entries: [5]u64 = .{ null_entry.to_int(), kernel_mode_code_entry.to_int(), kernel_mode_data_entry.to_int(), user_mode_code_entry.to_int(), user_mode_data_entry.to_int() };
+var entries: [6]u64 = .{
+    null_entry.toInt(),
+    kernel_mode_code_entry.toInt(),
+    kernel_mode_data_entry.toInt(),
+    user_mode_code_entry.toInt(),
+    user_mode_data_entry.toInt(),
+    // Placeholder for the TssEntry
+    0,
+};
+
+fn gdtEntryOfTss(tss: *const TssEntry) GdtEntry {
+    const base = @intFromPtr(tss);
+    const limit: u20 = @sizeOf(TssEntry) - 1;
+
+    const entry = GdtEntry{
+        .limit = limit,
+        .base = base,
+        .access = .{ .accessed = 1, .rw = .forbidden, .direction_conforming = 0, .executable = .executable, .descriptor = .system, .privilege = .ring0 },
+        .flags = .{ .granularity = .one_byte, .long_mode = .other, .size = .bit16 },
+    };
+
+    return entry;
+}
 
 pub const GdtPtr = packed struct {
     limit: u16,
@@ -187,6 +248,11 @@ pub fn init() void {
     Serial.writeln("beginning GDT initialization");
     defer Serial.printf("initialized GDT: {*}\n", .{ptr.base});
 
+    tss_entry.ss0 = KERNEL_DATA_SELECTOR;
+    tss_entry.esp0 = @intFromPtr(&KERNEL_STACK_START);
+    entries[5] = gdtEntryOfTss(&tss_entry).toIntRuntime();
+
     ptr.base = &entries[0];
     arch.lgdt(&ptr);
+    arch.ltr(TSS_CODE_SELECTOR);
 }
