@@ -28,6 +28,8 @@ pub fn build(b: *std.Build) void {
 
     const optimize = b.standardOptimizeOption(.{});
 
+    const syscall_mod = b.createModule(.{ .root_source_file = b.path("src/syscalls/abi.zig") });
+
     // Some temporary shims to run bryce until we have a proper ELF loader
     const bryce_mod = b.createModule(.{
         .root_source_file = b.path("bryce/init.zig"),
@@ -35,6 +37,7 @@ pub fn build(b: *std.Build) void {
         .optimize = optimize,
         .code_model = .kernel,
     });
+    bryce_mod.addImport("syscall_abi", syscall_mod);
     const bryce = b.addObject(.{
         .name = "init",
         .root_module = bryce_mod,
@@ -56,6 +59,7 @@ pub fn build(b: *std.Build) void {
         .basename = "init.bin",
     });
     exe_mod.addAnonymousImport("init_bin", .{ .root_source_file = bryce_bin.getOutput() });
+    exe_mod.addImport("syscall_abi", syscall_mod);
 
     const kernel = b.addExecutable(.{
         .name = "wrangell",

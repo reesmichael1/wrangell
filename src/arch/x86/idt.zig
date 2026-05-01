@@ -5,8 +5,11 @@ const gdt = @import("gdt.zig");
 const pic = @import("pic.zig");
 const Vga = @import("vga.zig").Vga;
 const Serial = @import("serial.zig").Serial;
+const syscalls = @import("../../syscalls/syscall.zig");
+const syscall_abi = @import("syscall_abi");
 
 const INTERRUPT_GATE: u4 = 0xE;
+const TRAP_GATE: u4 = 0xF;
 
 const IdtError = error{
     IdtEntryExists,
@@ -82,12 +85,16 @@ pub const CpuState = extern struct {
 };
 
 export fn isrHandler(cpu: CpuState) void {
-    Vga.printf("ESP = 0x{x:08}, EIP = 0x{x:08}\n", .{ cpu.esp, cpu.eip });
-
     // Eventually we'll have more informative fault handling
     // where we can actually check if a fault is recoverable or not.
     switch (cpu.int_no) {
+        syscall_abi.SYSCALL_INT_NO => {
+            // TODO: return error codes
+            const num = std.meta.intToEnum(syscall_abi.Number, cpu.eax) catch @panic("unrecognized syscall number");
+            syscalls.dispatch(num, cpu.ebx, cpu.ecx, cpu.edx, cpu.esi, cpu.edi);
+        },
         else => {
+            Vga.printf("ESP = 0x{x:08}, EIP = 0x{x:08}\n", .{ cpu.esp, cpu.eip });
             // The longest error name is 30 characters, and our message is 28
             var buf: [58]u8 = undefined;
             const msg = std.fmt.bufPrint(&buf, "unrecoverable kernel fault: {s}", .{exceptions[cpu.int_no].name}) catch unreachable;
@@ -107,7 +114,7 @@ export fn irqHandler(cpu: CpuState) void {
     }
 }
 
-fn getIrqStub(int_no: u8) InterruptHandler {
+fn getIrqStub(int_no: u32) InterruptHandler {
     // int_no is the mapped IRQ number (i.e., 32 for IRQ 0)
     return struct {
         fn func() callconv(.naked) void {
@@ -127,12 +134,14 @@ fn getIrqStub(int_no: u8) InterruptHandler {
     }.func;
 }
 
-fn getInterruptStub(int_no: u8) InterruptHandler {
+fn getInterruptStub(int_no: u32, include_cli: bool) InterruptHandler {
     return struct {
         fn func() callconv(.naked) void {
-            asm volatile ("cli");
+            if (include_cli) {
+                asm volatile ("cli");
+            }
 
-            if (!exceptions[int_no].has_error) {
+            if (int_no == syscall_abi.SYSCALL_INT_NO or !exceptions[int_no].has_error) {
                 asm volatile ("pushl $0");
             }
 
@@ -150,11 +159,11 @@ fn getInterruptStub(int_no: u8) InterruptHandler {
     }.func;
 }
 
-fn openGate(int_no: u8, handler: InterruptHandler) IdtError!void {
+fn openGate(int_no: u8, handler: InterruptHandler, ring: arch.PrivilegeLevel, gate: u4) IdtError!void {
     if (entries[int_no].present == 1) {
         return IdtError.IdtEntryExists;
     }
-    entries[int_no] = IdtEntry.make(INTERRUPT_GATE, arch.PrivilegeLevel.ring0, handler);
+    entries[int_no] = IdtEntry.make(gate, ring, handler);
 }
 
 const Exception = struct {
@@ -205,7 +214,7 @@ pub fn init() void {
     defer Serial.printf("initialized IDT: {*}\n", .{idtr.base});
 
     inline for (0.., exceptions) |i, _| {
-        openGate(i, getInterruptStub(i)) catch {
+        openGate(i, getInterruptStub(i, true), .ring0, INTERRUPT_GATE) catch {
             @panic("tried to open duplicate IDT gate");
         };
     }
@@ -213,10 +222,14 @@ pub fn init() void {
     pic.init();
 
     inline for (irqs) |irq| {
-        openGate(irq, getIrqStub(irq)) catch {
+        openGate(irq, getIrqStub(irq), .ring0, INTERRUPT_GATE) catch {
             @panic("tried to open duplicate IRQ gate");
         };
     }
+
+    openGate(syscall_abi.SYSCALL_INT_NO, getInterruptStub(syscall_abi.SYSCALL_INT_NO, false), .ring3, TRAP_GATE) catch {
+        @panic("could not open syscall gate");
+    };
 
     idtr.base = &entries[0];
     arch.lidt(&idtr);
