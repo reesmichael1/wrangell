@@ -66,17 +66,17 @@ fn exceptionHandler() noreturn {
 }
 
 pub const InterruptHandler = fn () callconv(.naked) void;
-pub const IsrHandler = fn (CpuState) void;
+pub const IsrHandler = fn (*CpuState) void;
 
 pub const CpuState = extern struct {
-    edi: u32,
-    esi: u32,
-    ebp: u32,
-    esp: u32,
-    ebx: u32,
-    edx: u32,
-    ecx: u32,
-    eax: u32,
+    edi: i32,
+    esi: i32,
+    ebp: i32,
+    esp: i32,
+    ebx: i32,
+    edx: i32,
+    ecx: i32,
+    eax: i32,
     int_no: u32,
     error_code: u32,
     eip: u32,
@@ -84,14 +84,29 @@ pub const CpuState = extern struct {
     eflags: u32,
 };
 
-export fn isrHandler(cpu: CpuState) void {
+export fn isrHandler(cpu: *CpuState) void {
+    // Codify the convention that 0 in EAX/EDX is a success
+    // when there's nothing else to return.
+    const eax = cpu.eax;
+    const edx = cpu.edx;
+    cpu.eax = 0;
+    cpu.edx = 0;
+
     // Eventually we'll have more informative fault handling
     // where we can actually check if a fault is recoverable or not.
     switch (cpu.int_no) {
         syscall_abi.SYSCALL_INT_NO => {
-            // TODO: return error codes
-            const num = std.meta.intToEnum(syscall_abi.Number, cpu.eax) catch @panic("unrecognized syscall number");
-            syscalls.dispatch(num, cpu.ebx, cpu.ecx, cpu.edx, cpu.esi, cpu.edi);
+            const num = std.meta.intToEnum(syscall_abi.Number, eax) catch {
+                cpu.eax = syscalls.intFromError(syscalls.SysError.BadSyscallNum);
+                return;
+            };
+            const a, const b = syscalls.dispatch(num, cpu.ebx, cpu.ecx, edx, cpu.esi, cpu.edi) catch |err| {
+                cpu.eax = syscalls.intFromError(err);
+                return;
+            };
+
+            cpu.eax = a;
+            cpu.edx = b;
         },
         else => {
             Vga.printf("ESP = 0x{x:08}, EIP = 0x{x:08}\n", .{ cpu.esp, cpu.eip });
@@ -103,7 +118,7 @@ export fn isrHandler(cpu: CpuState) void {
     }
 }
 
-export fn irqHandler(cpu: CpuState) void {
+export fn irqHandler(cpu: *CpuState) void {
     const int_no: u8 = @intCast(cpu.int_no);
     const irq_no = int_no - pic.IRQ_OFFSET;
     if (interrupt_handlers[int_no]) |handler| {
@@ -123,7 +138,11 @@ fn getIrqStub(int_no: u32) InterruptHandler {
                 \\ pushl $0
                 \\ pushl %[nr]
                 \\ pusha
+                // Since irqHandler takes a *CpuState,
+                // push the current address since we just pushed the CpuState
+                \\ pushl %%esp
                 \\ call irqHandler
+                \\ addl $4, %%esp
                 \\ popa
                 \\ addl $8, %%esp
                 \\ iret
@@ -148,7 +167,11 @@ fn getInterruptStub(int_no: u32, include_cli: bool) InterruptHandler {
             asm volatile (
                 \\ pushl %[nr]
                 \\ pusha
+                // Since irqHandler takes a *CpuState,
+                // push the current address since we just pushed the CpuState
+                \\ pushl %%esp
                 \\ call isrHandler
+                \\ addl $4, %%esp
                 \\ popa
                 \\ addl $8, %%esp
                 \\ iret

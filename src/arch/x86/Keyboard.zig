@@ -282,7 +282,7 @@ fn handleKeyRelease(key: Key) void {
     }
 }
 
-fn keypressCallback(_: idt.CpuState) void {
+fn keypressCallback(_: *idt.CpuState) void {
     const action = keyAction();
 
     switch (action) {

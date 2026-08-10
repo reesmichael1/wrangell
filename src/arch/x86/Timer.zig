@@ -8,7 +8,7 @@ var ticks: u32 = 0;
 
 const COMMAND_PORT: u16 = 0x43;
 
-fn timerCallback(_: idt.CpuState) void {
+fn timerCallback(_: *idt.CpuState) void {
     ticks += 1;
 }
 
