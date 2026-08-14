@@ -4,9 +4,6 @@ const boot = @import("boot.zig");
 const pmem = @import("pmem.zig");
 const Serial = @import("serial.zig").Serial;
 
-const PD: *[1024]DirectoryEntry = @ptrFromInt(0xFFFFF000);
-const PT: *[1024]DirectoryEntry = @ptrFromInt(0xFFC00000);
-
 // Page Directory Table = list of 1024 PDEs
 // Each page directory entry is a list of 1024 page tables
 // Each page table points to 4kb of memory
@@ -61,7 +58,7 @@ pub const masks = struct {
     pub const pat: u32 = 0x80;
     pub const global: u32 = 0x100;
 
-    fn is_set(entry: Entry, mask: u32) bool {
+    fn isSet(entry: Entry, mask: u32) bool {
         return entry.value() & mask != 0;
     }
 
@@ -96,25 +93,51 @@ pub const PageError = error{
     OutOfMemory,
 };
 
-fn pageDirectoryIndexToPhysAddr(index: u32) u32 {
+fn pageDirectoryIndexToVirtAddr(index: u32) u32 {
     return 0xFFC00000 + 0x1000 * index;
 }
 
-pub fn virtToPhys(virt: u32) PageError!u32 {
+fn pageDirectoryEntry(virt: u32) PageError!Entry {
+    const pd_index = virt >> 22;
+
+    const pd: *[1024]DirectoryEntry = @ptrFromInt(0xFFFFF000);
+    const dir: Entry = .{ .directory = pd[pd_index] };
+    if (!masks.isSet(dir, masks.present)) {
+        return PageError.NotMapped;
+    }
+
+    return .{ .directory = pd[pd_index] };
+}
+
+fn pageTableEntry(virt: u32) PageError!Entry {
     const pd_index = virt >> 22;
     const pt_index = (virt >> 12) & 0x03ff;
 
     const pd: *[1024]DirectoryEntry = @ptrFromInt(0xFFFFF000);
-    if (pd[pd_index] & masks.present == 0) {
+    const dir: Entry = .{ .directory = pd[pd_index] };
+    if (!masks.isSet(dir, masks.present)) {
         return PageError.NotMapped;
     }
 
-    const pt: *[1024]DirectoryEntry = @ptrFromInt(pageDirectoryIndexToPhysAddr(pd_index));
-    if (pt[pt_index] & masks.present == 0) {
+    if (masks.isSet(dir, masks.page_size)) {
+        return dir;
+    }
+
+    const pt: *[1024]DirectoryEntry = @ptrFromInt(pageDirectoryIndexToVirtAddr(pd_index));
+    const table: Entry = .{ .table = pt[pt_index] };
+    if (!masks.isSet(table, masks.present)) {
         return PageError.NotMapped;
     }
 
-    return (pt[pt_index] & 0xFFFFF000) + (virt & 0xFFF);
+    return table;
+}
+
+pub fn virtToPhys(virt: u32) PageError!u32 {
+    const pt_entry = try pageTableEntry(virt);
+    return switch (pt_entry) {
+        .table => |n| (n & 0xFFFFF000) + (virt & 0xFFF),
+        .directory => |n| (n & 0xFFC00000) + (virt & 0x3FFFFF),
+    };
 }
 
 pub fn mapSinglePage(phys: u32, virt: u32, flags: u32, size: Size) PageError!void {
@@ -134,7 +157,7 @@ pub fn mapSinglePage(phys: u32, virt: u32, flags: u32, size: Size) PageError!voi
     var pd: *[1024]DirectoryEntry align(FOUR_KB_SIZE) = @ptrFromInt(0xFFFFF000);
     var pt: *[1024]DirectoryEntry align(FOUR_KB_SIZE) = blk: {
         if (pd[pd_index] & masks.present != 0) {
-            const pt: *[1024]DirectoryEntry align(FOUR_KB_SIZE) = @ptrFromInt(pageDirectoryIndexToPhysAddr(pd_index));
+            const pt: *[1024]DirectoryEntry align(FOUR_KB_SIZE) = @ptrFromInt(pageDirectoryIndexToVirtAddr(pd_index));
             break :blk pt;
         } else {
             // First we allocate a page from the physical memory manager
@@ -157,7 +180,7 @@ pub fn mapSinglePage(phys: u32, virt: u32, flags: u32, size: Size) PageError!voi
                 \\ mov %%eax, %%cr3
                 ::: .{ .eax = true });
 
-            const pt: *[1024]DirectoryEntry = @ptrFromInt(pageDirectoryIndexToPhysAddr(pd_index));
+            const pt: *[1024]DirectoryEntry = @ptrFromInt(pageDirectoryIndexToVirtAddr(pd_index));
             for (pt) |*entry| {
                 entry.* = 0;
             }
@@ -171,6 +194,14 @@ pub fn mapSinglePage(phys: u32, virt: u32, flags: u32, size: Size) PageError!voi
     }
 
     pt[pt_index] = phys | flags | masks.present;
+}
+
+pub fn isUserMappedRead(addr: usize) bool {
+    const pd_entry = pageDirectoryEntry(addr) catch return false;
+    if (!masks.isSet(pd_entry, masks.user_supervisor)) return false;
+
+    const pt_entry = pageTableEntry(addr) catch return false;
+    return masks.isSet(pt_entry, masks.user_supervisor);
 }
 
 pub fn init() !void {

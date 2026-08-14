@@ -44,6 +44,8 @@ export fn _start() linksection(".text.boot") callconv(.naked) noreturn {
         // Actually enable the paging bit in cr0
         \\ mov %%cr0, %%ecx
         \\ or $0x80000000, %%ecx
+        // Enable the WP bit
+        \\ or $0x00010000, %%ecx
         \\ mov %%ecx, %%cr0
 
         // Enter the kernel at a higher half address

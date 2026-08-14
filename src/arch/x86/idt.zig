@@ -69,20 +69,52 @@ pub const InterruptHandler = fn () callconv(.naked) void;
 pub const IsrHandler = fn (*CpuState) void;
 
 pub const CpuState = extern struct {
-    edi: i32,
-    esi: i32,
-    ebp: i32,
-    esp: i32,
-    ebx: i32,
-    edx: i32,
-    ecx: i32,
-    eax: i32,
+    edi: u32,
+    esi: u32,
+    ebp: u32,
+    esp: u32,
+    ebx: u32,
+    edx: u32,
+    ecx: u32,
+    eax: u32,
     int_no: u32,
     error_code: u32,
     eip: u32,
     cs: u32,
     eflags: u32,
+    // These last two fields are only valid when the interrupt comes with a privilege change
+    // We could not load these and instead load a pointer past the field end...maybe eventually
+    user_esp: u32,
+    ss: u32,
+
+    const Self = @This();
+
+    fn privilegeChange(self: *const Self) bool {
+        return (self.cs & 3) != 0;
+    }
+
+    pub fn interruptedEsp(self: *const Self) u32 {
+        // If there was a privilege change, then the CPU pushes
+        // the prior stack pointer into self.user_esp.
+        if (self.privilegeChange()) return self.user_esp;
+        // If there was no privilege change, then the kernel stack
+        // previously pointed above `self.eflags`.
+        // By construction, `&self.user_esp` points to that address.
+        return @intFromPtr(&self.user_esp);
+    }
+
+    pub fn getSs(self: *const Self) ?u16 {
+        if (!self.privilegeChange()) {
+            return null;
+        }
+
+        return @truncate(self.ss);
+    }
 };
+
+fn sysErrorToU32(err: syscalls.SysError) u32 {
+    return @bitCast(@intFromEnum(syscalls.intFromError(err)));
+}
 
 export fn isrHandler(cpu: *CpuState) void {
     // Codify the convention that 0 in EAX/EDX is a success
@@ -97,11 +129,11 @@ export fn isrHandler(cpu: *CpuState) void {
     switch (cpu.int_no) {
         syscall_abi.SYSCALL_INT_NO => {
             const num = std.meta.intToEnum(syscall_abi.Number, eax) catch {
-                cpu.eax = syscalls.intFromError(syscalls.SysError.BadSyscallNum);
+                cpu.eax = sysErrorToU32(syscalls.SysError.BadSyscall);
                 return;
             };
             const a, const b = syscalls.dispatch(num, cpu.ebx, cpu.ecx, edx, cpu.esi, cpu.edi) catch |err| {
-                cpu.eax = syscalls.intFromError(err);
+                cpu.eax = sysErrorToU32(err);
                 return;
             };
 
@@ -109,7 +141,9 @@ export fn isrHandler(cpu: *CpuState) void {
             cpu.edx = b;
         },
         else => {
-            Vga.printf("ESP = 0x{x:08}, EIP = 0x{x:08}\n", .{ cpu.esp, cpu.eip });
+            const esp = cpu.interruptedEsp();
+
+            Vga.printf("ESP = 0x{x:08}, EIP = 0x{x:08}\n", .{ esp, cpu.eip });
             // The longest error name is 30 characters, and our message is 28
             var buf: [58]u8 = undefined;
             const msg = std.fmt.bufPrint(&buf, "unrecoverable kernel fault: {s}", .{exceptions[cpu.int_no].name}) catch unreachable;

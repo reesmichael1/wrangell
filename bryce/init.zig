@@ -1,9 +1,20 @@
 const std = @import("std");
-const syscalls = @import("syscalls.zig");
+const b = @import("blib");
+const syscalls = b.syscalls;
 
 pub const panic = std.debug.no_panic;
 
 export fn _start() noreturn {
-    _ = syscalls.sysWrite(1, 2) catch unreachable;
-    syscalls.sysExit(10);
+    const msg = "hello from blib!\n";
+    b.write(.stdout, msg) catch unreachable;
+
+    _ = syscalls.write(.stderr, 0xC0000000, 24) catch {
+        b.write(.stderr, "printing kernel memory was rejected\n") catch unreachable;
+    };
+
+    _ = syscalls.write(.stderr, 0xC0008000, 24) catch {
+        b.write(.stderr, "printing kernel memory was rejected\n") catch unreachable;
+    };
+
+    syscalls.exit(10);
 }

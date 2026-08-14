@@ -16,7 +16,7 @@ pub const ERR_HIGH = -1;
 
 // Linux provides 300-some syscalls, so we probably won't need more than that.
 // Besides, we want to move to a microkernel architecture someday.
-pub const Number = enum(i32) {
+pub const Number = enum(u32) {
     exit = 0,
     write = 1,
 };
@@ -24,4 +24,15 @@ pub const Number = enum(i32) {
 pub const ErrorNumber = enum(i32) {
     bad_syscall = -1,
     bad_fd = -2,
+    bad_address = -3,
+    overflow = -4,
+    out_of_range = -5,
+    _,
+};
+
+pub const FD = enum(u16) {
+    stdin = 0,
+    stdout = 1,
+    stderr = 2,
+    _,
 };

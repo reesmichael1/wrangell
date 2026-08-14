@@ -37,7 +37,6 @@ pub fn build(b: *std.Build) void {
         .optimize = optimize,
         .code_model = .kernel,
     });
-    bryce_mod.addImport("syscall_abi", syscall_mod);
     const bryce = b.addObject(.{
         .name = "init",
         .root_module = bryce_mod,
@@ -47,6 +46,15 @@ pub fn build(b: *std.Build) void {
     ld_cmd.addArg("-o");
     const bryce_elf = ld_cmd.addOutputFileArg("init.elf");
     ld_cmd.addFileArg(bryce.getEmittedBin());
+
+    const blib_mod = b.createModule(.{
+        .root_source_file = b.path("bryce/blib/root.zig"),
+        .target = b.resolveTargetQuery(kernel_query),
+        .optimize = optimize,
+        .code_model = .kernel,
+    });
+    blib_mod.addImport("syscall_abi", syscall_mod);
+    bryce_mod.addImport("blib", blib_mod);
 
     const exe_mod = b.createModule(.{
         .root_source_file = b.path("src/main.zig"),

@@ -1,7 +1,8 @@
 ENTRY(_start)
 
 SECTIONS {
-    . = 0x00000000;
+    /* We currently map this init command to 0xB0000000 within main.zig */
+    . = 0xB0000000;
 
     .text : {
         *(.text)
