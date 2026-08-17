@@ -11,7 +11,7 @@ pub const Flags = enum(u32) {
     }
 };
 
-const Header = packed struct {
+const Header = packed struct(u128) {
     magic: i32,
     flags: i32,
     checksum: i32,

@@ -236,7 +236,7 @@ fn gdtEntryOfTss(tss: *const TssEntry) GdtEntry {
 
 pub const GdtPtr = packed struct {
     limit: u16,
-    base: *const u64,
+    base: usize,
 };
 
 var ptr = GdtPtr{
@@ -246,13 +246,13 @@ var ptr = GdtPtr{
 
 pub fn init() void {
     Serial.writeln("beginning GDT initialization");
-    defer Serial.printf("initialized GDT: {*}\n", .{ptr.base});
+    defer Serial.printf("initialized GDT: 0x{x:08}\n", .{ptr.base});
 
     tss_entry.ss0 = KERNEL_DATA_SELECTOR;
     tss_entry.esp0 = @intFromPtr(&KERNEL_STACK_START);
     entries[5] = gdtEntryOfTss(&tss_entry).toIntRuntime();
 
-    ptr.base = &entries[0];
+    ptr.base = @intFromPtr(&entries[0]);
     arch.lgdt(&ptr);
     arch.ltr(TSS_CODE_SELECTOR);
 }

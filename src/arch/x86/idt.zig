@@ -41,7 +41,7 @@ const IdtEntry = packed struct(u64) {
 
 pub const IdtRegister = packed struct {
     limit: u16,
-    base: *const IdtEntry,
+    base: usize,
 };
 
 var entries: [256]IdtEntry = [_]IdtEntry{IdtEntry{
@@ -128,7 +128,7 @@ export fn isrHandler(cpu: *CpuState) void {
     // where we can actually check if a fault is recoverable or not.
     switch (cpu.int_no) {
         syscall_abi.SYSCALL_INT_NO => {
-            const num = std.meta.intToEnum(syscall_abi.Number, eax) catch {
+            const num = std.enums.fromInt(syscall_abi.Number, eax) orelse {
                 cpu.eax = sysErrorToU32(syscalls.SysError.BadSyscall);
                 return;
             };
@@ -268,7 +268,7 @@ const irqs = [_]u8{ 32, 33, 34, 35, 36, 37, 38, 39, 40, 41, 42, 43, 44, 45, 46, 
 
 pub fn init() void {
     Serial.writeln("beginning IDT initialization");
-    defer Serial.printf("initialized IDT: {*}\n", .{idtr.base});
+    defer Serial.printf("initialized IDT: 0x{x:08}\n", .{idtr.base});
 
     inline for (0.., exceptions) |i, _| {
         openGate(i, getInterruptStub(i, true), .ring0, INTERRUPT_GATE) catch {
@@ -288,7 +288,7 @@ pub fn init() void {
         @panic("could not open syscall gate");
     };
 
-    idtr.base = &entries[0];
+    idtr.base = @intFromPtr(&entries[0]);
     arch.lidt(&idtr);
 }
 

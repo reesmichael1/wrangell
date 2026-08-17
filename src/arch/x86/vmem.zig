@@ -65,12 +65,12 @@ pub const masks = struct {
     fn set(entry: Entry, mask: u32) Entry {
         // TODO: successfully make this a compile error
         switch (entry) {
-            .directory => |_| {
+            .directory => {
                 if (mask == global or mask == dirty) {
                     @panic("invalid mask used for page directory entry");
                 }
             },
-            .table => |_| {},
+            .table => {},
         }
 
         return switch (entry) {
