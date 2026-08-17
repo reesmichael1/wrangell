@@ -5,7 +5,7 @@ SECTIONS {
     . = 0xB0000000;
 
     .text : {
-        *(.text)
+        *(.text .text.*)
     }
 
     .rodata : { 

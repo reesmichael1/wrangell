@@ -34,18 +34,17 @@ pub fn build(b: *std.Build) void {
     const bryce_mod = b.createModule(.{
         .root_source_file = b.path("bryce/init.zig"),
         .target = b.resolveTargetQuery(kernel_query),
-        .optimize = optimize,
+        // For now, bryce has to fit in one page
+        .optimize = .ReleaseSmall,
         .code_model = .kernel,
     });
-    const bryce = b.addObject(.{
+    const bryce = b.addExecutable(.{
         .name = "init",
         .root_module = bryce_mod,
     });
-    const ld_cmd = b.addSystemCommand(&.{ "ld", "-m", "elf_i386", "-T" });
-    ld_cmd.addFileArg(b.path("bryce/linker.ld"));
-    ld_cmd.addArg("-o");
-    const bryce_elf = ld_cmd.addOutputFileArg("init.elf");
-    ld_cmd.addFileArg(bryce.getEmittedBin());
+    bryce.setLinkerScript(b.path("bryce/linker.ld"));
+    bryce.pie = false;
+    const bryce_elf = bryce.getEmittedBin();
 
     const blib_mod = b.createModule(.{
         .root_source_file = b.path("bryce/blib/root.zig"),
@@ -55,6 +54,7 @@ pub fn build(b: *std.Build) void {
     });
     blib_mod.addImport("syscall_abi", syscall_mod);
     bryce_mod.addImport("blib", blib_mod);
+    bryce_mod.addImport("syscall_abi", syscall_mod);
 
     const exe_mod = b.createModule(.{
         .root_source_file = b.path("src/main.zig"),

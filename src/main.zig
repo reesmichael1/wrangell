@@ -87,6 +87,7 @@ export fn kmain(magic: u32, info: *const multiboot.Info) noreturn {
     arch.vmem.mapSinglePage(user_stack_addr, 0xB0001000, arch.vmem.masks.present | arch.vmem.masks.user_supervisor | arch.vmem.masks.read_write, .four_kb) catch unreachable;
     const prog_mem: *[4096]u8 = @ptrFromInt(0xB0000000);
     const init = @embedFile("init_bin");
+    // TODO: map multiple pages for the init binary if necessary
     @memcpy(prog_mem[0..init.len], init);
 
     // TODO: remap as read-only now that we've loaded the init binary

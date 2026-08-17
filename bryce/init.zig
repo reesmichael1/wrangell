@@ -1,6 +1,7 @@
 const std = @import("std");
 const b = @import("blib");
 const syscalls = b.syscalls;
+const probes = @import("probes.zig");
 
 pub const panic = std.debug.no_panic;
 
@@ -16,5 +17,10 @@ export fn _start() noreturn {
         b.write(.stderr, "printing kernel memory was rejected\n") catch unreachable;
     };
 
-    syscalls.exit(10);
+    const res = probes.runAll();
+    if (res) {
+        syscalls.exit(0);
+    } else {
+        syscalls.exit(1);
+    }
 }
